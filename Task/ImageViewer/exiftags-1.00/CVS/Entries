@@ -1,0 +1,26 @@
+/Makefile/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/asahi.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/canon.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/casio.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/exif.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/exif.h/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/exifgps.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/exifint.h/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/exifutil.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/fuji.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/jpeg.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/jpeg.h/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/leica.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/makers.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/makers.h/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/makers_stub.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/minolta.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/nikon.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/olympus.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/panasonic.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/sanyo.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/sigma.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/tagdefs.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/timevary.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/timevary.h/1.1.1.1/Wed Feb 22 12:33:31 2006//
+D

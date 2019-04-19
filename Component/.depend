@@ -1,0 +1,185 @@
+fbdev.o: fbdev.cpp fbdev.h ../mpegdec/mpegdec.h object.h Pixmap.h
+Window.o: Window.cpp window.h object.h event.h fbdev.h \
+ ../mpegdec/mpegdec.h ../mpegdec/rmbasic.h ../mpegdec/../rmbasic.h \
+ Pixmap.h timer.h String.h
+image.o: image.cpp image.h FileUtil.h String.h Bitmap.h
+timer.o: timer.cpp timer.h ../Task/Msg.h ../Task/Task.h \
+ ../Task/TopPanel.h ../Task/SndCtrl.h ../Task/MiscCtrl.h \
+ ../Task/../Driver/misc/misc_ctrl.h object.h
+ListView.o: ListView.cpp fbdev.h ../mpegdec/mpegdec.h \
+ ../mpegdec/rmbasic.h ../mpegdec/../rmbasic.h object.h Pixmap.h \
+ ListView.h window.h event.h timer.h String.h VScrollBar.h ScrollBar.h \
+ Array.h ../Lib/LibImage.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/linuxfs.h \
+ /home/ywkim/Tavi/TAVI020/tavi/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/filebrowser.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/bitmap.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/tavi_palette.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/ImageResource.h \
+ /home/ywkim/Tavi/TAVI020/tavi/jpeg/jpeg.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jpeglib.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jconfig.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jmorecfg.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/tavi_lib.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/ImageFont.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/ImageResource.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/meplib.h \
+ /home/ywkim/Tavi/TAVI020/tavi/fs.h \
+ /home/ywkim/Tavi/TAVI020/tavi/fs_fat.h ../Lib/../Component/object.h \
+ ../Lib/../Component/Stack.h ../Lib/../Component/event.h \
+ ../Lib/../Component/fbdev.h ../Lib/../Component/image.h \
+ ../Lib/../Component/timer.h CharSet.h
+Pixmap.o: Pixmap.cpp Pixmap.h object.h fbdev.h ../mpegdec/mpegdec.h \
+ ../mpegdec/rmbasic.h ../mpegdec/../rmbasic.h
+Label.o: Label.cpp Label.h window.h object.h event.h fbdev.h \
+ ../mpegdec/mpegdec.h ../mpegdec/rmbasic.h ../mpegdec/../rmbasic.h \
+ Pixmap.h timer.h String.h ../Lib/LibImage.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/linuxfs.h \
+ /home/ywkim/Tavi/TAVI020/tavi/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/filebrowser.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/bitmap.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/tavi_palette.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/ImageResource.h \
+ /home/ywkim/Tavi/TAVI020/tavi/jpeg/jpeg.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jpeglib.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jconfig.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jmorecfg.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/tavi_lib.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/ImageFont.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/ImageResource.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/meplib.h \
+ /home/ywkim/Tavi/TAVI020/tavi/fs.h \
+ /home/ywkim/Tavi/TAVI020/tavi/fs_fat.h ../Lib/../Component/object.h \
+ ../Lib/../Component/Stack.h ../Lib/../Component/event.h \
+ ../Lib/../Component/fbdev.h ../Lib/../Component/image.h \
+ ../Lib/../Component/timer.h CharSet.h
+RadioButton.o: RadioButton.cpp fbdev.h ../mpegdec/mpegdec.h \
+ ../mpegdec/rmbasic.h ../mpegdec/../rmbasic.h object.h Pixmap.h \
+ RadioButton.h window.h event.h timer.h String.h ../Lib/LibImage.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/linuxfs.h \
+ /home/ywkim/Tavi/TAVI020/tavi/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/filebrowser.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/bitmap.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/tavi_palette.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/ImageResource.h \
+ /home/ywkim/Tavi/TAVI020/tavi/jpeg/jpeg.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jpeglib.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jconfig.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jmorecfg.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/tavi_lib.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/ImageFont.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/ImageResource.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/meplib.h \
+ /home/ywkim/Tavi/TAVI020/tavi/fs.h \
+ /home/ywkim/Tavi/TAVI020/tavi/fs_fat.h ../Lib/../Component/object.h \
+ ../Lib/../Component/Stack.h ../Lib/../Component/event.h \
+ ../Lib/../Component/fbdev.h ../Lib/../Component/image.h \
+ ../Lib/../Component/timer.h
+String.o: String.cpp String.h
+ProgressBar.o: ProgressBar.cpp ProgressBar.h window.h object.h event.h \
+ fbdev.h ../mpegdec/mpegdec.h ../mpegdec/rmbasic.h \
+ ../mpegdec/../rmbasic.h Pixmap.h timer.h String.h
+FileUtil.o: FileUtil.cpp FileUtil.h String.h ListView.h window.h \
+ object.h event.h fbdev.h ../mpegdec/mpegdec.h ../mpegdec/rmbasic.h \
+ ../mpegdec/../rmbasic.h Pixmap.h timer.h VScrollBar.h ScrollBar.h \
+ Array.h
+VScrollBar.o: VScrollBar.cpp VScrollBar.h ScrollBar.h window.h \
+ object.h event.h fbdev.h ../mpegdec/mpegdec.h ../mpegdec/rmbasic.h \
+ ../mpegdec/../rmbasic.h Pixmap.h timer.h String.h
+SpinSelectBar.o: SpinSelectBar.cpp SpinSelectBar.h window.h object.h \
+ event.h fbdev.h ../mpegdec/mpegdec.h ../mpegdec/rmbasic.h \
+ ../mpegdec/../rmbasic.h Pixmap.h timer.h String.h CharSet.h \
+ ../Lib/LibImage.h /home/ywkim/Tavi/TAVI020/tavi/include/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/linuxfs.h \
+ /home/ywkim/Tavi/TAVI020/tavi/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/filebrowser.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/bitmap.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/tavi_palette.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/ImageResource.h \
+ /home/ywkim/Tavi/TAVI020/tavi/jpeg/jpeg.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jpeglib.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jconfig.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jmorecfg.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/tavi_lib.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/ImageFont.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/ImageResource.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/meplib.h \
+ /home/ywkim/Tavi/TAVI020/tavi/fs.h \
+ /home/ywkim/Tavi/TAVI020/tavi/fs_fat.h ../Lib/../Component/object.h \
+ ../Lib/../Component/Stack.h ../Lib/../Component/event.h \
+ ../Lib/../Component/fbdev.h ../Lib/../Component/image.h \
+ ../Lib/../Component/timer.h
+ComplexLabel.o: ComplexLabel.cpp ComplexLabel.h window.h object.h \
+ event.h fbdev.h ../mpegdec/mpegdec.h ../mpegdec/rmbasic.h \
+ ../mpegdec/../rmbasic.h Pixmap.h timer.h String.h Label.h
+ComplexListView.o: ComplexListView.cpp ComplexListView.h
+ModalWnd.o: ModalWnd.cpp ModalWnd.h window.h String.h Pixmap.h \
+ CharSet.h
+BottomWnd.o: BottomWnd.cpp BottomWnd.h
+Bitmap.o: Bitmap.cpp Bitmap.h
+SlideBar.o: SlideBar.cpp SlideBar.h window.h object.h event.h fbdev.h \
+ ../mpegdec/mpegdec.h ../mpegdec/rmbasic.h ../mpegdec/../rmbasic.h \
+ Pixmap.h timer.h String.h ../Lib/LibImage.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/linuxfs.h \
+ /home/ywkim/Tavi/TAVI020/tavi/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/filebrowser.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/bitmap.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/tavi_palette.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/ImageResource.h \
+ /home/ywkim/Tavi/TAVI020/tavi/jpeg/jpeg.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jpeglib.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jconfig.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jmorecfg.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/tavi_lib.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/ImageFont.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/ImageResource.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/meplib.h \
+ /home/ywkim/Tavi/TAVI020/tavi/fs.h \
+ /home/ywkim/Tavi/TAVI020/tavi/fs_fat.h ../Lib/../Component/object.h \
+ ../Lib/../Component/Stack.h ../Lib/../Component/event.h \
+ ../Lib/../Component/fbdev.h ../Lib/../Component/image.h \
+ ../Lib/../Component/timer.h
+ClockSetView.o: ClockSetView.cpp fbdev.h ../mpegdec/mpegdec.h \
+ ../mpegdec/rmbasic.h ../mpegdec/../rmbasic.h object.h Pixmap.h \
+ ClockSetView.h window.h event.h timer.h String.h ../Lib/LibImage.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/linuxfs.h \
+ /home/ywkim/Tavi/TAVI020/tavi/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/filebrowser.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/bitmap.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/tavi_palette.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/ImageResource.h \
+ /home/ywkim/Tavi/TAVI020/tavi/jpeg/jpeg.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jpeglib.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jconfig.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jmorecfg.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/tavi_lib.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/ImageFont.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/ImageResource.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/meplib.h \
+ /home/ywkim/Tavi/TAVI020/tavi/fs.h \
+ /home/ywkim/Tavi/TAVI020/tavi/fs_fat.h ../Lib/../Component/object.h \
+ ../Lib/../Component/Stack.h ../Lib/../Component/event.h \
+ ../Lib/../Component/fbdev.h ../Lib/../Component/image.h \
+ ../Lib/../Component/timer.h ../Driver/rtc/tavi_rtc.h
+CharSet.o: CharSet.cpp
+ProgressDlg.o: ProgressDlg.cpp ProgressDlg.h window.h object.h event.h \
+ fbdev.h ../mpegdec/mpegdec.h ../mpegdec/rmbasic.h \
+ ../mpegdec/../rmbasic.h Pixmap.h timer.h String.h Label.h ModalWnd.h
+ContextMenu.o: ContextMenu.cpp ContextMenu.h window.h

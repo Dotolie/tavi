@@ -1,0 +1,71 @@
+ImageViewer.o: ImageViewer.cpp \
+ /home/ywkim/Tavi/TAVI020/tavi/include/../Lib/LibImage.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/linuxfs.h \
+ /home/ywkim/Tavi/TAVI020/tavi/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/filebrowser.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/bitmap.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/tavi_palette.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/ImageResource.h \
+ /home/ywkim/Tavi/TAVI020/tavi/jpeg/jpeg.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jpeglib.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jconfig.h \
+ /home/ywkim/Tavi/TAVI020/thirdparties/libjpeg/jmorecfg.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/tavi_lib.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/ImageFont.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/ImageResource.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/meplib.h \
+ /home/ywkim/Tavi/TAVI020/tavi/fs.h \
+ /home/ywkim/Tavi/TAVI020/tavi/fs_fat.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/../Lib/../Component/object.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/../Lib/../Component/Stack.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/../Lib/../Component/event.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/../Lib/../Component/fbdev.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/../Lib/../Component/image.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/../Lib/../Component/timer.h \
+ ImageViewer.h ThumbDB.h ../../jpeg/jpeg.h IVMainWnd.h
+IVMainWnd.o: IVMainWnd.cpp ImageViewer.h ThumbDB.h IVMainWnd.h \
+ IVSListView.h IVListView.h IVPreView.h IVTileViewer.h
+IVListView.o: IVListView.cpp ../Msg.h ImageViewer.h ThumbDB.h \
+ IVMainWnd.h IViewer.h IVListView.h IViewerBottomWnd.h \
+ /home/ywkim/Tavi/TAVI020/tavi/Lib/LibNFile.h
+IVSListView.o: IVSListView.cpp IVSListView.h IVListView.h
+IVPreView.o: IVPreView.cpp IVPreView.h IVListView.h ThumbDB.h \
+ ImageViewer.h
+IVTileViewer.o: IVTileViewer.cpp IVTileViewer.h IVListView.h ThumbDB.h \
+ ImageViewer.h
+IViewer.o: IViewer.cpp ../Msg.h ../Task.h ../TopPanel.h ../SndCtrl.h \
+ ../MiscCtrl.h ../../Driver/misc/misc_ctrl.h IViewer.h IVListView.h \
+ IViewerBottomWnd.h ../../linuxfs.h ../../jpeg/jpeg.h IVInfoWnd.h \
+ exiftags-1.00/jpeg.h exiftags-1.00/exif.h ImageViewer.h ThumbDB.h
+IViewerBottomWnd.o: IViewerBottomWnd.cpp IViewer.h IVListView.h \
+ IViewerBottomWnd.h
+IVInfoWnd.o: IVInfoWnd.cpp IVInfoWnd.h exiftags-1.00/jpeg.h \
+ exiftags-1.00/exif.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/../Lib/LibImage.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/linuxfs.h \
+ /home/ywkim/Tavi/TAVI020/tavi/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/filebrowser.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../rmbasic.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/bitmap.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/tavi_palette.h \
+ /home/ywkim/Tavi/TAVI020/tavi/filebrowser/../include/ImageResource.h \
+ /home/ywkim/Tavi/TAVI020/tavi/jpeg/jpeg.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/tavi_lib.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/ImageFont.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/ImageResource.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/meplib.h \
+ /home/ywkim/Tavi/TAVI020/tavi/fs.h \
+ /home/ywkim/Tavi/TAVI020/tavi/fs_fat.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/../Lib/../Component/object.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/../Lib/../Component/Stack.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/../Lib/../Component/event.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/../Lib/../Component/fbdev.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/../Lib/../Component/image.h \
+ /home/ywkim/Tavi/TAVI020/tavi/include/../Lib/../Component/timer.h \
+ IViewer.h IVListView.h IViewerBottomWnd.h
+ThumbDB.o: ThumbDB.cpp ThumbDB.h

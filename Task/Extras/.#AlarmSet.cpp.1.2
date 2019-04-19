@@ -1,0 +1,1071 @@
+//********************** Copyright(C) New Media Life Inc. *********************
+//
+// Description : Alarm Setting
+// 
+// $Source: /home/cvsroot/TAVI020/tavi/Task/Extras/AlarmSet.cpp,v $
+// $Revision: 1.2 $
+// $Date: 2006/04/15 01:37:22 $
+// $Author: zstein $
+//
+//*****************************************************************************
+// $Log: AlarmSet.cpp,v $
+// Revision 1.2  2006/04/15 01:37:22  zstein
+// - added alarm volume control.
+//
+// Revision 1.1.1.1  2006/02/22 12:33:31  zstein
+// TAVI020 REBUILD
+//
+// Revision 1.41  2006/02/15 05:46:48  zstein
+// - fixed snooze bug.
+//
+// Revision 1.40  2006/02/13 13:16:53  zstein
+// -
+//
+// Revision 1.39  2005/12/30 04:25:46  etnlwind
+// Update for New Font Adaption
+//
+// Revision 1.38  2005/12/20 08:58:09  etnlwind
+// Update for Exit & Save Process
+//
+// Revision 1.37  2005/12/13 05:04:29  etnlwind
+// Update for WakeUp BugFix
+//
+// Revision 1.36  2005/12/12 06:48:45  akaiaphanu
+// Updated to HDD Sleep , Background and Switch mode
+//
+// Revision 1.35  2005/12/09 07:12:11  etnlwind
+// Add TAVI_KEY_SHUTDOWN
+//
+// Revision 1.34  2005/12/09 02:58:16  ywkim
+// Chnage am 0 hour to am 12 hour for display
+//
+// Revision 1.33  2005/12/08 08:57:03  etnlwind
+// Update for Alarm Task
+//
+// Revision 1.32  2005/12/08 08:15:58  etnlwind
+// Update for Task Switching
+//
+// Revision 1.31  2005/12/05 08:35:31  etnlwind
+// Update for AlarmSet Invalid Menu Ordering Fix
+//
+// Revision 1.30  2005/11/30 11:30:11  etnlwind
+// Update for AlarmSet Multi-Langul Process
+//
+// Revision 1.29  2005/11/28 04:25:39  etnlwind
+// Update for VideoPlayer
+//
+// Revision 1.28  2005/11/25 12:54:37  ywkim
+// Add MsgSend for Alarm
+//
+// Revision 1.27  2005/11/25 08:40:42  etnlwind
+// Update for New EQ
+//
+// Revision 1.26  2005/11/24 09:35:28  etnlwind
+// Update for New EQ UI
+//
+// Revision 1.25  2005/11/24 03:05:01  zstein
+// *** empty log message ***
+//
+// Revision 1.24  2005/11/23 09:33:59  etnlwind
+// Update for TAVI-EQ
+//
+// Revision 1.23  2005/11/22 08:11:28  etnlwind
+// Update for New EQ UI
+//
+// Revision 1.22  2005/11/22 04:55:09  etnlwind
+// Update for SoundPalette New UI
+//
+// Revision 1.21  2005/11/21 12:00:32  etnlwind
+// Update for AlarmClock & Sound Palette UI
+//
+// Revision 1.20  2005/11/21 05:06:32  etnlwind
+// Update for Clock Font
+//
+// Revision 1.19  2005/11/21 03:06:08  etnlwind
+// Update for AlarmPopup Remove
+//
+// Revision 1.18  2005/11/21 02:45:19  etnlwind
+// AlarmPopup Removed
+//
+// Revision 1.17  2005/11/17 08:34:17  etnlwind
+// Update for AlarmSet
+//
+// Revision 1.16  2005/11/17 05:52:28  etnlwind
+// Update for Alarm
+//
+// Revision 1.15  2005/11/17 03:03:57  etnlwind
+// Update for SubMenu ClosingProc Related
+//
+// Revision 1.14  2005/11/16 09:51:27  etnlwind
+// Update for AlarmSet Dbx
+//
+// Revision 1.13  2005/11/16 08:48:52  etnlwind
+// Update for AlarmSet
+//
+// Revision 1.12  2005/11/10 07:35:21  akaiaphanu
+// merge Extra clock & alarm
+//
+// Revision 1.11  2005/11/10 01:11:01  zstein
+// *** empty log message ***
+//
+// Revision 1.10  2005/11/06 11:08:10  yong
+// Not so many
+//
+// Revision 1.9  2005/10/20 04:20:53  yong
+// useAlarm, onHolidays is now boolean, not index
+//
+// Revision 1.8  2005/10/17 11:24:25  yong
+// read/write TaviSysParam
+// USB connect/disconnect bug in message processing
+// initial alarm set
+//
+// Revision 1.7  2005/10/13 05:56:54  yong
+// Send touch event to ComplexListView
+// work in progress
+//
+// Revision 1.6  2005/10/12 06:07:06  ywkim
+// Add function of Resize for CComplexListView
+//
+// Revision 1.5  2005/10/12 05:03:29  yong
+// working
+//
+// Revision 1.4  2005/10/12 01:56:21  akaiaphanu
+// Add to log Information
+//
+//*****************************************************************************
+
+/* mAN-yOnG lEE <yong@NewMediaLife.com> 2005-10-11 */
+
+#include <Task/tavi_global.h>
+#include "util.h"	// for gettime_ms()
+
+#include <Component/ComplexListView.h>
+#include <Component/ModalWnd.h>
+#include <Component/ListView.h>
+#include "Extra.h"
+#include "AlarmSet.h"
+//#include "Lib/LibNFile.h"
+
+#define	MY_DEBUG			1
+#define	SLEEP_INTERVAL		10000
+
+static CAlarmSet 			*s_AlarmSet		= NULL;
+static bool 				isTopVisible	= false;
+static MEP_REL_VELOCITY		last_velocity	= MEP_VELOCITY_UNKNOWN;
+extern CFileBrowser* pLFBrowser;
+extern CTextEngine_BDF* pT;
+extern CTopPanel* g_TopPanel;
+extern EXTRA_CONFIG _ExtraProperty;
+
+static int set_alarm_rtc(int hour, int min, bool fOnOff)
+{
+    int handle_rtc;
+    extern bool g_Snooze;
+    struct rtc_time rtime;
+    time_t t;
+    struct tm* tm;
+    int lhour, ghour;
+    int dhour;
+
+    t = time( NULL );
+    tm = gmtime( &t );
+    ghour = tm->tm_hour;
+    tm = localtime( &t );
+    lhour = tm->tm_hour;
+    
+
+    int diff_hour = lhour - ghour;
+    hour = hour - diff_hour;
+    if( hour < 0 ) hour = hour + 24;
+    else if( hour > 23 ) hour = hour - 24;
+    
+	rtime.tm_hour = hour;
+	rtime.tm_min = min;
+
+    
+	handle_rtc = open( RTC_DRIVER_PATH, O_RDWR );
+	if ( handle_rtc < 0 ) {
+		return -1;
+		}
+	else {
+		if(fOnOff) {
+			ioctl( handle_rtc, RTC_AIE_ON );
+			if( ioctl( handle_rtc, RTC_ALM_SET, &rtime ) < 0 ) {
+				printf( "failed to RTC_ALM_SET\n" );
+				return 0;
+				}
+			}
+		else {
+			ioctl( handle_rtc, RTC_AIE_OFF );
+			}
+		close(handle_rtc);
+		}
+	g_Snooze = false;
+	
+	return 1;
+}
+
+/*
+ *
+ * CAlarmSet Class
+ *
+ */
+
+CAlarmSet::CAlarmSet( void ) : CModalWnd(NULL)
+{
+	this->m_nBackgroundColor	= 24;
+	//this->m_nTitleResID			= ML_GENERAL;
+	this->SetTitle(ML_EXTRA_ALARM);
+//	this->m_nOkResID			= ML_APPLY;
+//	this->m_nExitResID			= ML_CANCEL;
+	this->m_nExitResID			= ML_EXIT;
+
+	this->cListView = new CComplexListView( this );
+	this->cListView->m_nBackgroundColor = 24;
+
+	this->pStr = new CString;
+	this->pMbx =  new CMsgBox;
+
+	memset( AlarmFullpath, 0, sizeof(uchar_t)*260);
+	memset( AlarmFilename, 0, sizeof(char)*64);
+
+}
+
+CAlarmSet::~CAlarmSet( void )
+{
+	delete this->pStr;
+	delete this->pMbx;
+
+	for(int i=0; i<24; i++)
+		free(hoursText[i]);
+
+	for(int i=0; i<60; i++)
+		free(minutesText[i]);
+}
+void CAlarmSet::Init( void )
+{
+
+	int TxtRes_OnOff[2];
+	uchar_t* pBuffer;
+	int AmPmTxtRes;
+	int TimeDigit=0;
+	char minStr[4];
+	int TxtRes_Repeat[5];
+	int TxtRes_Interval[3];
+	int TxtRes_AlarmType[2];
+	int TxtRes_AlarmVolRange[2];
+
+	// row 0
+	TxtRes_OnOff[0] = ML_ON;
+	TxtRes_OnOff[1] = ML_OFF;
+
+	// row 1
+	for( int i=0; i<24; i++ )
+		{
+		if( i <= 11 ) 
+			{
+			AmPmTxtRes = ML_AM;
+			if ( i== 0 )	TimeDigit = 12;
+			else			TimeDigit = i;
+			}
+		else 
+			{
+			AmPmTxtRes = ML_PM;
+			if(i==12) TimeDigit = 12;
+			else TimeDigit = i-12;
+			}
+		pBuffer = (uchar_t*) malloc( sizeof(uchar_t)*16 );
+		hoursText[i] = SetTimeStr( AmPmTxtRes, TimeDigit, pBuffer );
+		}
+
+
+	// row 2
+	for( int i=0; i<60; i++ )
+		{
+		sprintf( minStr, "%d", i );
+//		printf("-Buffer[%d] : [%s]\n", i, minStr );
+		pBuffer = (uchar_t*) malloc( sizeof(uchar_t)*8 );
+		str2ustr( pBuffer, minStr );
+		minutesText[i] = pBuffer;
+//		DEBUG_U16MSG(pBuffer, "-Buffer");
+		}
+
+	// row 3
+	TxtRes_Repeat[0] = ML_EXTRA_ALARM_REPEAT_NO;
+	TxtRes_Repeat[1] = ML_EXTRA_ALARM_REPEAT_2;
+	TxtRes_Repeat[2] = ML_EXTRA_ALARM_REPEAT_3;
+	TxtRes_Repeat[3] = ML_EXTRA_ALARM_REPEAT_4;
+	TxtRes_Repeat[4] = ML_EXTRA_ALARM_REPEAT_5;
+
+	// row 4
+	TxtRes_Interval[0] = ML_EXTRA_ALARM_INTERVAR_5M;
+	TxtRes_Interval[1] = ML_EXTRA_ALARM_INTERVAR_10M;
+	TxtRes_Interval[2] = ML_EXTRA_ALARM_INTERVAR_15M;
+
+	// row 5
+	TxtRes_AlarmType[0] = ML_EXTRA_ALARM_DEFAULT;
+	TxtRes_AlarmType[1] = ML_EXTRA_ALARM_USER;
+
+	// row 6
+	TxtRes_AlarmVolRange[0] = 0;
+	TxtRes_AlarmVolRange[1] = 40;
+
+
+	// row 6
+	char *AlarmFile[1];
+	AlarmFile[0] = this->AlarmFilename; 
+
+	this->LoadFromTaviSysParam();
+	this->Add( ML_EXTRA_ALARM, _RADIO_BUTTON, _MACROS, TxtRes_OnOff, NULL, 2, this->useAlarm );
+	this->Add( ML_HOURS, _SPIN_SELECT_BAR, _UNICODE_STRINGS, NULL, hoursText, 24, this->hour );
+	this->Add( ML_MINUTES, _SPIN_SELECT_BAR, _UNICODE_STRINGS, NULL, minutesText, 60, this->min );
+	this->Add( ML_REPEAT, _SPIN_SELECT_BAR, _MACROS, TxtRes_Repeat, NULL, 5, this->repeat );
+	this->Add( ML_EXTRA_ALARM_INTERVAR, _SPIN_SELECT_BAR, _MACROS, TxtRes_Interval, NULL, 3, this->interval );
+	this->Add( ML_EXTRA_ALARM_TYPE, _RADIO_BUTTON, _MACROS, TxtRes_AlarmType, NULL, 2, this->AlarmType );
+	this->Add( ML_VOLUME, _SLIDE_BAR, _MACROS, TxtRes_AlarmVolRange, NULL, 2, this->m_AlarmVol );
+	this->_addSelect( ML_EXTRA_ALARM_MUSIC, 1, AlarmFile, 1, 0 );							// 6
+	this->cListView->ResetScrollBar();
+
+	switch(this->AlarmType)
+		{
+		case 0:	// Default Alarm
+			uchar_t stmp[80];
+			pStr->SetString("Default",false);
+			s_AlarmSet->SetConfig(6, *(pStr));
+			break;
+
+		case 1:	// User Alarm
+			_SetUserMusicFullpath(_DEFAULT_START);
+			break;
+
+		default:
+			ASSERT(0);
+			break;
+		}
+
+	extern void showbackground(int);
+	op_ClearAreaOSD( 0, 0, 320, 240 );
+	isTopVisible = g_TopPanel->GetVisible();
+	_ShowTopPannel();
+ }
+
+
+void CAlarmSet::OnPaint( const CRect& rc ) { CModalWnd::OnPaint(rc); }
+int CAlarmSet::SendEvent( CEvent &evt ) { this->cListView->SendEvent(evt); }
+void CAlarmSet::Resize( const CRect& rc, bool fUpdate )
+{
+	CWindow::Resize( rc, fUpdate );	// XXX
+
+	// Resize Complext ListView
+	CRect rc2	= rc;
+	rc2.x1		= 2;
+	rc2.y1		= 30;
+	rc2.x2		= rc.GetWidth() - 1;
+	rc2.y2		= rc.GetHeight() - 30;
+	this->cListView->Resize( rc2, fUpdate );
+}
+void CAlarmSet::Show( void )
+{
+	CModalWnd::OnPaint( CRect(0, 0, 320, 240) );
+	this->cListView->Show();
+	op_Flush();
+}
+void CAlarmSet::Hide( void ) {}
+
+
+int CAlarmSet::_SetConfig( int idx, const CString& StrValue, int NumValue  )
+{
+	CComplexListView *cListView = this->cListView;
+	CCMListItem *pItem;
+	CComplexLabel *pCMLabel;
+	CWindow *mComp;
+	CSpinSelectBar *pSpinBar;
+	CRadioButton *pRadioBtn;
+	int count;
+	int index;
+	int winType;
+
+	count = cListView->GetCount();
+	pItem = (CCMListItem*) cListView->GetItem(idx);
+	pCMLabel = (CComplexLabel*) pItem->m_pComponent;
+	mComp = pCMLabel->GetComponent();
+	winType = mComp->GetWindowType();
+
+	if (winType == WINDOW_TYPE_RADIOBUTTON) 
+		{
+		pRadioBtn = (CRadioButton *)mComp;
+		index = pRadioBtn->GetSelectedIndex();
+		if( NumValue < 0 )
+			return FALSE;
+		else
+			pRadioBtn->SetSelectIndex(NumValue);
+		} 
+	else 
+		{	// WINDOW_TYPE_SPINBAR
+		pSpinBar = (CSpinSelectBar *)mComp;
+
+		if( StrValue == "" )
+			return FALSE;
+		else
+			pSpinBar->ReplaceUniqueText(StrValue);
+
+		index = pSpinBar->GetSelectedIndex();
+		}
+
+	return 1;
+}
+int CAlarmSet::SetConfig( int idx, const CString& value ) { return _SetConfig( idx, value, -1 );}
+int CAlarmSet::SetConfig( int idx, int value ) { return _SetConfig( idx, CString(""), value ); }
+
+
+int CAlarmSet::_AddItem( eCtrlType Ctrl, void* vC, eDataType Data, int vD[], uchar_t* vDD[], int nData )
+{
+	CSpinSelectBar* pSb;
+	CRadioButton* pRb;
+
+//	printf("CAlarmSet::_AddItem( Ctrl:%d Data:%d )\n", Ctrl, Data);
+
+	switch( Ctrl )
+		{
+		case _SPIN_SELECT_BAR:
+		//	printf("-_SPIN_SELECT_BAR\n");
+			pSb = (CSpinSelectBar*)vC;
+
+			if( Data ) 
+				{ //_UNICODE_STRINGS
+				for (int i=0; i < nData; i++) 
+					pSb->Add( CString(vDD[i]) );
+				}
+			else
+				{ //_MACROS
+				for (int i=0; i < nData; i++) 
+					pSb->Add( (int)vD[i] );
+				}
+			break;
+
+		case _RADIO_BUTTON:
+		//	printf("-_RADIO_BUTTON\n");
+			pRb = (CRadioButton*)vC;
+
+			if( Data ) 
+				{ //_UNICODE_STRINGS
+//				printf("-_UNICODE_STRINGS\n");
+				pRb->AddItem( CString(vDD[0]), true );
+				pRb->AddItem( CString(vDD[1]), false );
+				}
+			else
+				{ //_MACROS
+//				printf("-_MACROS\n");
+				pRb->AddItem( vD[0], true );
+				pRb->AddItem( vD[1], false );
+				}
+			break;		
+
+
+		}
+	return TRUE;
+}
+
+int CAlarmSet::_addSelect(char *label, int selectType, char **items, int itemCount, int selected)
+{
+	return TRUE;
+}
+int CAlarmSet::_addSelect(int LabelTxtRes, int selectType, char **items, int itemCount, int selected)
+{
+	CLabel				*pLabel;
+	CSpinSelectBar		*pSpinBar;
+	CRadioButton			*pRadioBtn;
+	CComplexLabel		*pCxLabel;
+	CListItem				*pItem;
+
+	int bgColor			= 24;
+	int focusColor		= 28;
+	int w				= this->cListView->GetBarWidth() - 4;
+	int hw				= (w / 2) - 8; // 8 left and right margin
+	int h					= this->cListView->GetBarHeight() - 2;
+	int labelFg			= COLOR_WHITE;
+	int labelBg			= COLOR_TRANSPARENT;
+
+//	printf("%10s (%10s) %2d %d %d %d\n", labelText, items[0], itemCount, w, hw, h);
+
+	// <Component/Label.h>
+	// CLabel( CWindow* parent, int nFGColor, int nBGColor, char* szText=0 )
+
+	pLabel = new CLabel( NULL, labelFg, labelBg, LabelTxtRes );
+	pLabel->m_nBackgroundColor = bgColor;
+	pLabel->m_nBorderColor = bgColor;
+	pLabel->Resize( CRect(0, 0, hw, h), false );	// XXX
+	pLabel->m_nFontWidth = 16;
+	pLabel->m_nFontHeight = 15;
+
+	if( selectType == 1 ) 
+		{	// SpinBar
+		pSpinBar = new CSpinSelectBar( NULL, FALSE, itemCount);	// FALSE: Using string, not Resource ID int
+		pSpinBar->m_nFocusedColor = focusColor;
+		pSpinBar->m_nBackgroundColor = bgColor;
+		pSpinBar->m_nBorderColor = bgColor;
+		pSpinBar->Resize( CRect(0, 0, hw, h), false );	// XXX
+
+		for (int i=0; i < itemCount; i++) {
+
+			pSpinBar->Add( CString(items[i]) );
+		}
+		pSpinBar->SetSelectIndex( selected );
+		} 
+
+	else 
+		{				// Radio
+		pRadioBtn = new CRadioButton( NULL, TRUE );	// TRUE means Count == 2
+		pRadioBtn->m_nBackgroundColor = bgColor;
+		pRadioBtn->m_nBorderColor = bgColor;
+		pRadioBtn->Resize( CRect(0, 0, hw, h), false );	// XXX
+		pRadioBtn->AddItem( CString(items[0]), true );
+		pRadioBtn->AddItem( CString(items[1]), false );
+		pRadioBtn->SetSelectIndex( selected );
+
+		}
+
+
+
+	pCxLabel = new CComplexLabel( NULL );
+	pCxLabel->m_nBackgroundColor = bgColor;
+	pCxLabel->m_nBorderColor = bgColor;
+	pCxLabel->Resize( CRect(0, 0, w, h), false );	// XXX
+	pCxLabel->SetLabel( pLabel );
+
+	if (selectType == 1)
+		pCxLabel->AddComponent( pSpinBar );
+	else
+		pCxLabel->AddComponent( pRadioBtn );
+
+	pItem = new CCMListItem( pCxLabel );
+	this->cListView->AddItem( pItem );
+	return 1;
+}
+int CAlarmSet::Add( int LabelTxtRes, eCtrlType Ctrl, eDataType Data, int vD[], uchar_t* vDD[], int nData, int selected )
+{
+	CLabel				*pLabel;
+	CSpinSelectBar		*pSpinBar;
+	CRadioButton		*pRadioBtn;
+	CSlideBar           *pSlideBar;
+	CComplexLabel		*pCxLabel;
+	CListItem			*pItem;
+
+	int bgColor			= 24;
+	int focusColor		= 28;
+	int w				= this->cListView->GetBarWidth() - 4;
+	int hw				= (w / 2) - 8; // 8 left and right margin
+	int h				= this->cListView->GetBarHeight() - 2;
+	int labelFg			= COLOR_WHITE;
+	int labelBg			= COLOR_TRANSPARENT;
+
+
+//	printf("CAlarmSet::Add()\n");
+//	printf("%10s (%10s) %2d %d %d %d\n", labelText, items[0], itemCount, w, hw, h);
+
+	// <Component/Label.h>
+	// CLabel( CWindow* parent, int nFGColor, int nBGColor, char* szText=0 )
+
+	pLabel = new CLabel( NULL, labelFg, labelBg, LabelTxtRes );
+	pLabel->m_nBackgroundColor = bgColor;
+	pLabel->m_nBorderColor = bgColor;
+	pLabel->Resize( CRect(0, 0, hw, h), false );	// XXX
+	pLabel->m_nFontWidth = 16;
+	pLabel->m_nFontHeight = 15;
+
+	if( Ctrl == _SPIN_SELECT_BAR ) {	// SpinBar
+		if( Data ) {
+			pSpinBar = new CSpinSelectBar( NULL, FALSE, nData);	// FALSE: Using string, not Resource ID int
+			pSpinBar->m_nFocusedColor = focusColor;
+			pSpinBar->m_nBackgroundColor = bgColor;
+			pSpinBar->m_nBorderColor = bgColor;
+			pSpinBar->Resize( CRect(0, 0, hw, h), false );	// XXX
+
+			_AddItem( _SPIN_SELECT_BAR, (void*)pSpinBar, Data, NULL, vDD, nData );
+		}
+		else {
+			pSpinBar = new CSpinSelectBar( NULL, TRUE, nData);	// FALSE: Using string, not Resource ID int
+			pSpinBar->m_nFocusedColor = focusColor;
+			pSpinBar->m_nBackgroundColor = bgColor;
+			pSpinBar->m_nBorderColor = bgColor;
+			pSpinBar->Resize( CRect(0, 0, hw, h), false );	// XXX
+
+			_AddItem( _SPIN_SELECT_BAR, (void*)pSpinBar, Data, vD, NULL, nData );
+		}
+		
+		pSpinBar->SetSelectIndex( selected );
+	}
+	else if( Ctrl == _SLIDE_BAR ) {
+	    pSlideBar = new CSlideBar( NULL );
+    	pSlideBar->m_nBackgroundColor = bgColor;
+    	pSlideBar->m_nBorderColor = bgColor;
+    	pSlideBar->Resize( CRect(0, 0, hw, h), false );
+    	pSlideBar->SetMinMax( vD[0], vD[1] );
+    	pSlideBar->SetValue( selected );
+	}
+	else {				// Radio
+		pRadioBtn = new CRadioButton( NULL, TRUE );	// TRUE means Count == 2
+		pRadioBtn->m_nBackgroundColor = bgColor;
+		pRadioBtn->m_nBorderColor = bgColor;
+		pRadioBtn->Resize( CRect(0, 0, hw, h), false );	// XXX
+		_AddItem( _RADIO_BUTTON, (void*)pRadioBtn, Data, vD, NULL, nData );
+		pRadioBtn->SetSelectIndex( selected );
+
+	}
+
+
+	pCxLabel = new CComplexLabel( NULL );
+	pCxLabel->m_nBackgroundColor = bgColor;
+	pCxLabel->m_nBorderColor = bgColor;
+	pCxLabel->Resize( CRect(0, 0, w, h), false );	// XXX
+	pCxLabel->SetLabel( pLabel );
+
+	if (Ctrl == _SPIN_SELECT_BAR) {
+		pCxLabel->AddComponent( pSpinBar );
+	}
+	else if( Ctrl == _SLIDE_BAR ) {
+	    pCxLabel->AddComponent( pSlideBar );
+	}
+	else {
+		pCxLabel->AddComponent( pRadioBtn );
+	}
+
+	pItem = new CCMListItem( pCxLabel );
+	this->cListView->AddItem( pItem );
+	return 1;
+}
+int CAlarmSet::addHorizSelect(char *labelText, char **items, int itemCount, int selected=0) 
+{
+	return this->_addSelect(labelText, 1, items, itemCount, selected);
+}
+int CAlarmSet::addRadioSelect(char *labelText, char **items, int itemCount, int selected=0)
+{
+	return this->_addSelect(labelText, 2, items, itemCount, selected);
+}
+
+int CAlarmSet::CurrentPos( void ) {return this->cListView->GetSelectedIndex();}
+
+int CAlarmSet::LoadFromTaviSysParam()
+{
+	this->useAlarm	= TaviSysParam.alarm.useAlarm;
+	this->hour 		= TaviSysParam.alarm.hour;
+	this->min 		= TaviSysParam.alarm.min;
+	this->repeat 	= TaviSysParam.alarm.repeat;
+	this->interval 	= TaviSysParam.alarm.interval;
+	this->AlarmType	= TaviSysParam.alarm.AlarmType;
+	this->m_AlarmVol = TaviSysParam.alarm.volume;
+	this->AlarmType_OriginalValue = TaviSysParam.alarm.AlarmType;
+	return 1;
+}
+int CAlarmSet::Cancel()
+{
+	TaviSysParam.alarm.AlarmType = this->AlarmType_OriginalValue;
+	switch(TaviSysParam.alarm.AlarmType)
+		{
+		case 0:	// Default Alarm
+		#if 0
+			uchar_t stmp[80];
+			pStr->SetString("Default",false);
+			s_AlarmSet->SetConfig(6, *(pStr));
+		#else
+			s_AlarmSet->SetConfig(7, ML_EXTRA_ALARM_DEFAULT );
+		#endif
+			
+			break;
+
+		case 1:	// User Alarm
+			_SetUserMusicFullpath(_DEFAULT_START);
+			break;
+		}
+
+	return 1;
+}
+int CAlarmSet::SaveToTaviSysParam()
+{
+	CComplexListView	*cListView = this->cListView;
+	CCMListItem *pItem;
+	CComplexLabel *pCMLabel;
+	CWindow *mComp;
+	CSpinSelectBar *pSpinBar;
+	CRadioButton *pRadioBtn;
+	CSlideBar* pSlideBar;
+	int count;
+	int index;
+	int winType;
+
+	count	= cListView->GetCount();
+
+	for (int i=0 ; i < count; i++) 
+		{
+		pItem		= (CCMListItem *)cListView->GetItem(i);
+		pCMLabel		= (CComplexLabel *)pItem->m_pComponent;
+		mComp		= pCMLabel->GetComponent();
+		winType 		= mComp->GetWindowType();
+
+		if (winType == WINDOW_TYPE_RADIOBUTTON) {
+			pRadioBtn = (CRadioButton *)mComp;
+			index = pRadioBtn->GetSelectedIndex();
+		} 
+        else if( winType == WINDOW_TYPE_SLIDEBAR ) {
+            pSlideBar = ( CSlideBar* )mComp;
+            index = pSlideBar->GetValue();
+        }
+		else {	// WINDOW_TYPE_SPINBAR
+			pSpinBar = (CSpinSelectBar *)mComp;
+			index = pSpinBar->GetSelectedIndex();
+		}
+
+		switch(i)
+			{
+			case 0: TaviSysParam.alarm.useAlarm = index; break;
+			case 1: TaviSysParam.alarm.hour = index; break;
+			case 2: TaviSysParam.alarm.min = index; break;
+			case 3: TaviSysParam.alarm.repeat = index; break;
+			case 4: TaviSysParam.alarm.interval = index; break;
+			case 5:
+				if(index&&ustrlen((uchar_t*)TaviSysParam.alarm.UserMusicFullpath))
+					TaviSysParam.alarm.AlarmType = 1;
+				else
+					TaviSysParam.alarm.AlarmType = 0;
+				break;
+		    case 6:
+		        TaviSysParam.alarm.volume = index;
+		        break;
+			default: break;
+			}
+		
+		}
+
+	if( TaviSysParam.alarm.useAlarm == 0 )
+		set_alarm_rtc( TaviSysParam.alarm.hour, TaviSysParam.alarm.min, 1 );
+	else
+		set_alarm_rtc( TaviSysParam.alarm.hour, TaviSysParam.alarm.min, 0 );
+
+	UpdateAlarmStatus();
+	return 1;
+}
+
+int CAlarmSet::OnKeyPressed(int key){return 1;}
+int CAlarmSet::OnTouchPad(int p1, int p2){return 1;}
+
+static void _Show_Message(TMsgEntry *m)
+{
+/*
+	printf(
+		"<<AlarmSet_MsgProc @ %d>> tMsg {%d, %d, 0x%x, %d}\n",
+		gettime_ms(),
+		m->ssToTaskId, m->ulMsgId, m->usParam1, m->usParam2
+		);
+*/		
+}
+static void _Prepare_Screen(void)
+{
+	TAVI_WakeUp(0);
+	extern void showbackground(int);
+	extern CTopPanel* g_TopPanel;
+
+	pMpegDecoder->TAVI_InitSystemPalette();
+	TAVI_LoadPaletteTransparencyData(TRUE);
+	showbackground( 9 );
+	op_ClearAreaOSD( 0, 0, 320, 240 );
+
+	g_TopPanel->SetTitle( ML_EXTRA );
+	g_TopPanel->SetLogo( CTopPanel::LOGO_ID_ETC);
+	g_TopPanel->SetBatteryLevel( (CTopPanel::BatteryLevel)CalcBatteryLevel() );
+
+	isTopVisible = g_TopPanel->GetVisible();
+
+	g_TopPanel->SetVisible( true );
+	g_TopPanel->Show();
+	s_AlarmSet->Show();
+
+	return;
+}
+static void _Finish_Screen(void)
+{
+	g_TopPanel->SetVisible( isTopVisible );
+	ClearOsd();
+	return;
+}
+static unsigned char* _GetImageElement( BITMAPFILEINFO256 bmp, int id, int count )
+{
+    unsigned char* p;
+    int w = bmp.bitmapinfoheader.biWidth;
+    int h = bmp.bitmapinfoheader.biHeight;
+    int dh = h/count;
+
+    p = bmp.image_buffer+w*dh*id;
+
+    return p;
+}
+int _SetUserMusicFullpath( eUserMusicAlarmMethod Method )
+{
+	uchar_t ucTemp[80];
+	int ucLen=0;
+	int StrWidth=0;
+	CSize Sz;		
+	CString csTemp;
+
+	if( Method == _REFRESH_BY_FILEBROWSER_SELECT )
+		{
+		memset( TaviSysParam.alarm.UserMusicFullpath, 0, 260*2 );
+		ustrcpy( (uchar_t*)TaviSysParam.alarm.UserMusicFullpath, pLFBrowser->CurrentFullPathDir );
+		adduchar( (uchar_t*)TaviSysParam.alarm.UserMusicFullpath, (uchar_t)'/');
+		ustrcat( (uchar_t*)TaviSysParam.alarm.UserMusicFullpath, pLFBrowser->Filename);
+		}
+
+	// Get Filename
+	memset( ucTemp, 0x0000, sizeof(uchar_t)*80);
+	GetLastItem_In_UC16FullDirString_WithUserDefineSplitter(ucTemp, (uchar_t*) TaviSysParam.alarm.UserMusicFullpath, (uchar_t)'/');
+
+	ucLen = ustrlen( ucTemp );
+	StrWidth=0;
+	for(int idx=0; idx<ucLen; idx++)
+		{
+		pT->GetCharSize(ucTemp[idx], 12, &Sz);
+		if( (StrWidth+=Sz.width) > 92 )
+			{
+			ucTemp[idx-1] = (uchar_t)'.';
+			ucTemp[idx] = (uchar_t)'.';
+			ucTemp[idx+1] = (uchar_t)'.';
+			ucTemp[idx+2] = 0x0000;
+			ucTemp[idx+3] = 0x0000;
+			break;
+			}
+		}
+
+
+	// AlarmType = User Define
+	TaviSysParam.alarm.AlarmType = 1;
+	s_AlarmSet->SetConfig(5, TaviSysParam.alarm.AlarmType);
+
+	// Set UserMusicFullpath
+	csTemp.SetString( (char*)ucTemp, true);
+	s_AlarmSet->SetConfig(7, csTemp);
+
+	return TRUE;
+}
+int _ShowTopPannel()
+{
+	g_TopPanel->SetTitle( ML_EXTRA );
+	g_TopPanel->SetLogo( CTopPanel::LOGO_ID_ETC);
+	g_TopPanel->SetBatteryLevel( (CTopPanel::BatteryLevel)CalcBatteryLevel() );
+	g_TopPanel->SetVisible( true );
+	g_TopPanel->Show();
+	return TRUE;
+}
+int AS_MsgProc(int ssTaskId, U32 ssMsgId, int usParam1 , int usParam2)
+{
+	CEvent	evt;
+	MouseEvent mEvt;
+
+	int p1 = usParam1;
+	int p2 = usParam2;
+	int vkey;
+	int where;
+	int exitStatus;
+//	ExecNode		execNode = { MEDIA_AUDIO, selectAlarmFile };
+
+	TMsgEntry		drawMsg;
+
+	int ret;
+	CListItem* pItem;
+	CComplexLabel* pCMLabel;
+	CWindow* mComp;
+	CSpinSelectBar *pSpinBar;
+	CString csTemp;
+
+	drawMsg.ulMsgId		= MSG_DRAW;
+	drawMsg.ssToTaskId	= ssTaskId;
+	drawMsg.usParam1		= 0;
+	drawMsg.usParam2		= 0;
+
+	if( pLFBrowser->isVisible() && ssMsgId != MSG_CREATE && ssMsgId != MSG_DRAW )
+		{
+		if((ret=pLFBrowser->MsgProc( ssTaskId, ssMsgId, usParam1, usParam2)) == FILEBROWSER_RETURN_FILE_SELECTED )
+			{
+			_SetUserMusicFullpath(_REFRESH_BY_FILEBROWSER_SELECT);
+			pLFBrowser->Hide();
+			_ShowTopPannel();
+			s_AlarmSet->Show();
+			}
+
+		else if( ret == FILEBROWSER_RETURN_EXIT )
+			{
+			_SetUserMusicFullpath(_REFRESH_BY_FILEBROWSER_EXIT);
+			pLFBrowser->Hide();
+			_ShowTopPannel();
+			s_AlarmSet->Show();			
+			return 0;
+			}
+		}
+	else
+		{
+
+		switch (ssMsgId)
+			{
+			case MSG_TOUCHPAD:
+//				printf("<<%s>>: MsgProc: TOUCHPAD\n", __FILE__);
+/*
+				if (p1 == TP_RIGHT)  		printf("<<%s>>: MsgProc: TOUCHPAD (RIGHT)\n", __FILE__);
+				else if (p1 == TP_LEFT) 	printf("<<%s>>: MsgProc: TOUCHPAD (LEFT)\n", __FILE__);
+				else if (p2 == TP_ENTER) 	printf("<<%s>>: MsgProc: TOUCHPAD (ENTER)\n", __FILE__);
+*/
+				mEvt.x		= p1;
+				mEvt.click	= p2;
+				evt.type		= EVENT_MOUSE;
+				evt.u.mouse	= mEvt;
+				s_AlarmSet->SendEvent(evt);
+
+				break;
+
+			case MSG_BUTTON_UP:
+				where = s_AlarmSet->CurrentPos();
+//				printf("<<%s>>: MsgProc: BUTTON_UP on %d\n", __FILE__, where);
+
+				switch (p1) 
+					{
+					
+					case TAVI_KEY_MODE:
+						s_AlarmSet->SaveToTaviSysParam();
+						_ExtraProperty.m_SubAlarmState = ALARM_EXIT_BACKGROUND;
+						return _ALARMSET_TASK_EXIT;
+
+					case TAVI_KEY_LMODE:
+						s_AlarmSet->SaveToTaviSysParam();
+						_ExtraProperty.m_SubAlarmState = ALARM_EXIT_SWITCH;
+						return _ALARMSET_TASK_EXIT;
+						break;
+						
+					case TAVI_KEY_SHUTDOWN:
+						_ExtraProperty.m_SubAlarmState = ALARM_EXIT_NORMAL;
+						MSG_Send( TASK_ID_ETC, MSG_BUTTON_UP,  TAVI_KEY_SHUTDOWN, 0 );
+						return _ALARMSET_TASK_EXIT;
+
+					case TAVI_KEY_LEXIT:	// Exit!
+						_ExtraProperty.m_SubAlarmState = ALARM_EXIT_NORMAL;
+						MSG_Send( TASK_ID_ETC, MSG_BUTTON_UP,  TAVI_KEY_LEXIT, 0 );
+					case TAVI_KEY_EXIT:
+
+						s_AlarmSet->SaveToTaviSysParam();
+
+						if( TaviSysParam.alarm.useAlarm ) 
+							s_AlarmSet->pMbx->Reset( ML_INFORMATION, _ORANGE, ML_MSG_ALARM_DISABLED, -1, -1, 0, DL_BG_BLANK );
+						else 
+							s_AlarmSet->pMbx->Reset( ML_INFORMATION, _ORANGE, ML_MSG_ALARM_ENABLED, -1, -1, 0, DL_BG_BLANK );
+						
+						s_AlarmSet->pMbx->Show();
+						ClearKeyBuffer();
+						for(int loop=0;loop<40;loop++) usleep(1000);
+						
+						s_AlarmSet->pMbx->Hide();
+						ClearKeyBuffer();
+						_ExtraProperty.m_SubAlarmState = ALARM_EXIT_NORMAL;
+						return _ALARMSET_NORMAL_EXIT;
+						break;
+
+					case TAVI_KEY_ENTER:	
+						break;
+
+					case TAVI_KEY_MENU:		break;
+					default:
+
+						if( p1 == TAVI_KEY_RIGHT && where == 7 )
+							{
+							pLFBrowser->SetActiveMode( _FBMODE_ALARM_SETTTING, 0, TRUE );
+							pLFBrowser->Show();
+							Reset_FileBrowserTimer();
+							}
+						
+						else
+							{
+
+							if( p1 == TAVI_KEY_LEFT && where == 5 )
+								{
+								#if 0
+								csTemp.SetString("Default",false);
+								s_AlarmSet->SetConfig(6, csTemp);
+								#else
+								s_AlarmSet->SetConfig(7, ML_EXTRA_ALARM_DEFAULT );
+								#endif
+								s_AlarmSet->Show();
+								}
+							else if( p1 == TAVI_KEY_RIGHT && where == 5 )
+								{
+								_SetUserMusicFullpath(_DEFAULT_START);
+								s_AlarmSet->Show();
+								}
+
+							evt.type = EVENT_KEY;
+							evt.u.key.value = MapToVirtualKey(p1);
+							evt.u.key.pressed = KEY_PRESSED;
+							s_AlarmSet->SendEvent(evt);
+							}
+						
+						break;
+				}
+
+				break;
+
+			case MSG_CREATE:
+//				printf("MSG_CREATE\n");
+				break;
+
+			case MSG_DRAW:
+//				printf("MSG_DRAW\n");
+				s_AlarmSet->Show();
+				break;
+
+			default:
+				break;
+		}
+	}
+
+	return 0;
+}
+
+int
+AS_Kill(void)
+{
+	return 1;
+}
+
+extern int
+AlarmSet_Task(void)
+{
+	TMsgEntry tMsg;
+
+	g_CurrentTaskID = 7;
+
+	s_AlarmSet	= new CAlarmSet();
+	s_AlarmSet->Resize( CRect(10, 30, 310, 225), true );
+	s_AlarmSet->Init();
+
+	_Prepare_Screen();
+
+	last_velocity = mep_get_velocity();
+
+	while( true )
+		{
+		if( MSG_Peek( 7, &tMsg ) == 0) 
+			{
+			//_Show_Message(&tMsg);
+			if( AS_MsgProc( tMsg.ssToTaskId, tMsg.ulMsgId, tMsg.usParam1, tMsg.usParam2 ) < 0) 
+				{
+				break;
+				}
+			}
+		else 
+			{
+			usleep(SLEEP_INTERVAL); // 1,000,000 usec = 1sec
+			}
+		}
+
+	_Finish_Screen();
+	delete s_AlarmSet;
+
+	return 1;
+}
+
+/* END */
+

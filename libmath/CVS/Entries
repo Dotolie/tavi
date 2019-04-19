@@ -1,0 +1,17 @@
+/Makefile/1.2/Wed Feb 22 13:06:13 2006//
+/e_exp.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/e_log.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/e_log10.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/e_pow.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/e_scalb.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/e_sqrt.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/math.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/math.h/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/math_.h/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/math_private.h/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/s_copysign.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/s_fabs.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/s_floor.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/s_isnan.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/s_scalbn.c/1.1.1.1/Wed Feb 22 12:33:31 2006//
+D

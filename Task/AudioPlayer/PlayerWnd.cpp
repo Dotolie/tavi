@@ -1,0 +1,1480 @@
+//************************ Copyright(C) New Media Life Inc. ************************
+//
+// Description : Player Window class definition
+// 
+// $Source: /home/cvsroot/TAVI020/tavi/Task/AudioPlayer/PlayerWnd.cpp,v $
+// $Revision: 1.13 $
+// $Date: 2006/06/22 01:41:47 $
+// $Author: zstein $ Lee Seok<zstein@newmedialife.com>
+//
+//******************************************************************************
+// $Log: PlayerWnd.cpp,v $
+// Revision 1.13  2006/06/22 01:41:47  zstein
+// - fixed title bug.
+//
+// Revision 1.12  2006/06/12 08:54:47  zstein
+// - make title scroll stop when an error is occured.
+//
+// Revision 1.11  2006/06/12 04:30:32  ywkim
+// Change some routine for melon
+// Add function of Process_Melon()
+//
+// Revision 1.10  2006/06/12 03:06:51  zstein
+// - delay on add-to-playlist.
+//
+// Revision 1.9  2006/06/07 07:54:03  zstein
+// - added file into the i-playlist on playing.
+// - skip to next file when current file is bad.
+//
+// Revision 1.8  2006/05/17 05:13:45  zstein
+// - fixed system down bug.
+//
+// Revision 1.7  2006/03/17 06:59:08  zstein
+// - deleted mute procedure when next play.
+//
+// Revision 1.6  2006/03/16 03:37:56  zstein
+// - removed pop-noise when start music.
+//
+// Revision 1.5  2006/03/10 02:27:53  zstein
+// - mute on next music.
+//
+// Revision 1.4  2006/03/09 02:13:44  zstein
+// - changed volume interface.
+//
+// Revision 1.3  2006/03/07 05:14:22  zstein
+// -
+//
+// Revision 1.2  2006/03/07 02:35:44  zstein
+// - Redraws the music main list window when a music is stopped.
+//
+// Revision 1.1.1.1  2006/02/22 12:33:31  zstein
+// TAVI020 REBUILD
+//*******************************************************************************
+
+#include <unistd.h>
+#include <time.h>
+#include <stdlib.h>
+
+#include "Component/ListView.h"
+#include "Component/FileUtil.h"
+#include "Component/CharSet.h"
+#include "Driver/touchpad/meplib.h"
+#include "Task/tavi_global.h"
+#include "Task/SndCtrl.h"
+
+#include "PlayerWnd.h"
+#include "ID3/libid3.h"
+#include "Task/Msg.h"
+#include "Task/TopPanel.h"
+#include "ID3/m3u.h"
+#include "Task/ExtLCD.h"
+#include "fs.h"
+#include "AudioPlayer.h"
+#include "musicdef.h"
+
+
+// Macros
+#define LEVELMETER_BG_HEIGHT		50
+#define LEVELMETER_BG_WIDTH		260
+
+#define DEBUGMSG		printf
+//#define DEBUGMSG		
+
+// Extern Variables
+extern SysParameter_t TaviSysParam;
+extern CSndCtrl* g_SndCtrl;
+extern CTopPanel* g_TopPanel;
+extern BITMAPFILEINFO256 TAVI_IMAGES[];
+extern CTextEngine_BDF* pT;
+extern CExtLCD* g_ExtLCD;
+extern  RMuint32 *pcm_buffer;	// for shared memory scheme
+
+// Local Variables
+static CPlayerWnd* PLAYER;
+static bool readytodie;
+
+static int titleScrollPos = 0;
+
+static int
+ScrollTitle()
+{
+	titleScrollPos += 1;
+	return 1;
+}
+
+CPlayerWnd::CPlayerWnd( CWindow* parent )
+{
+	Init();
+	readytodie = false;
+	PLAYER = this;
+}
+
+CPlayerWnd::~CPlayerWnd( void )
+{
+  extern CPlayerWnd* g_PlayerWnd;
+	QBUF_t* buf = ( QBUF_t* )&m_uzCmd;
+	TAVI_WakeUp( 105 );
+	SendCmd( AUDIO_CMD_STOP );
+	
+	delete m_puzImage;
+	delete m_pmArtist;
+	delete m_pmAlbum;
+
+	if( g_MiscCtrl->FolderClosed() ) {
+		g_ExtLCD->ChangeMode( CExtLCD::EXT_STAGE_LIST );
+	}
+	g_TopPanel->SetPlayMode( CTopPanel::PLAYMODE_STOP );
+
+	if( m_pMsgBox ) delete m_pMsgBox;
+
+	g_PlayKey = 0;
+
+	if( m_eq_enable == false )
+		TaviSysParam.sound.eq = m_eq_save;
+
+	// KILL sound palette instance
+	if( g_pSndPalette ) delete g_pSndPalette;
+	g_pSndPalette = NULL;
+
+  
+	/* Redraws main list window if it is a current window */
+	CList< CWindow >* pWndList = AP_GetWndList();
+	CWindow* pWnd;
+	int i;
+	
+	for ( pWnd=pWndList->GetData(0), i=0; pWnd; i++ ) {
+		pWnd = pWndList->GetData(i);
+		if( pWnd->GetWindowTitle() == "MusicMain" ) break;
+	}
+
+  g_PlayerWnd = NULL;
+  
+	if( pWnd ) {
+    if( pWnd->IsShow() ) {
+        pWnd->Show();
+      }
+	}
+}
+
+void CPlayerWnd::Init( void )
+{
+	int iw, ih, icw, ich;
+	pid_t pid;
+
+	m_pPL		= 0;
+	m_pMsgBox	= 0;
+	m_nType		= -1;
+	m_cmd_ready	= false;
+	m_state		= AUDIO_STATE_STOP;
+	m_eq_enable	= true;
+	m_eq_block	= false;
+	m_eq_save	= TaviSysParam.sound.eq;
+	m_nErrCnt = 0;
+	
+	m_puzImage	= new CPixmap;
+	m_puzImage->CreatePixmap(
+		TAVI_IMAGES[AUDIO_BIG_ICON].bitmapinfoheader.biWidth,
+		TAVI_IMAGES[AUDIO_BIG_ICON].bitmapinfoheader.biHeight,
+		8,
+		(char*)TAVI_IMAGES[AUDIO_BIG_ICON].image_buffer, false );
+
+	icw = TAVI_IMAGES[TYPE_ICON_LIST].bitmapinfoheader.biWidth;
+	ich = TYPE_ICON_HEIGHT;
+
+	char* pImage = (char*)TAVI_IMAGES[TYPE_ICON_LIST].image_buffer;
+
+	m_pmArtist	= new CPixmap;
+	m_pmArtist->CreatePixmap( icw, ich, 8, pImage+2*icw*ich, false );
+	m_pmAlbum	= new CPixmap;
+	m_pmAlbum->CreatePixmap( icw, ich, 8, pImage+6*icw*ich, false );
+	
+	iw = m_puzImage->m_nWidth;
+	ih = m_puzImage->m_nHeight;
+
+	int _baseY = 24 - 4;
+
+	// Title label
+	m_puzTitle = new CLabel( this, _WHITE, 0, " " );
+	m_puzTitle->EnableScroll( true );
+	m_puzTitle->Resize( CRect(30+iw+8, _baseY, 310, 48), false );
+	m_puzTitle->m_nFontHeight = 16;
+	m_puzTitle->m_nFontOption = DT_TRANSPARENCY | DT_OUTLINE;
+	m_puzTitle->SetScrollStep(4);
+
+	//m_puzTitle->SetFontOption( DT_TRANSPARENCY | DT_SHADOW );
+
+	// Artist
+	m_puzArtist = new CLabel( this, _WHITE, 0, " " );
+	m_puzArtist->Resize( CRect(30+iw+8+icw+5, _baseY + 24, 310, 64), false );
+	m_puzArtist->m_nFontHeight = 12;
+
+	// Album
+	m_puzAlbum = new CLabel( this, _WHITE, 0, " " );
+	m_puzAlbum->Resize( CRect(30+iw+8+icw+5, _baseY + 24 + 16, 310, 82), false );
+	m_puzAlbum->m_nFontHeight = 12;
+
+	// Media Info
+	m_puzInfo = new CLabel( this, _WHITE, 0, " " );
+	m_puzInfo->Resize( CRect(30+iw+8+icw+5, _baseY + 24 + 16 + 18,  310, 100) , false );
+	m_puzInfo->m_nFontHeight = 12;
+
+	// Count
+#if 0
+	m_puzCount = new CLabel( this, _GRAY, _WHITE, "000/000" );
+	m_puzCount->Resize( CRect(34, 84, 92, 98), false );
+	m_puzCount->m_nFontHeight = 12;
+	m_puzCount->SetFontOption( DT_TRANSPARENCY );
+#endif
+
+	m_puzBottomWnd	= new CPlayerBottomWnd( this, 0, TaviSysParam.music.repeat, TaviSysParam.music.shuffle );
+	m_puzBottomWnd->Resize( CRect(0, 169, 319, 209), false );
+	m_puzBottomWnd->SetMode( CBottomWnd::BW_NORMAL );
+
+	// Open message queue
+	if( m_uzQID < 0 ) {
+		// show message
+		fprintf( stderr, "failed to open message queue\n" );
+	}
+
+	//m_uzQID = SysMSGInit( AUDIO_MSG_KEY );
+	m_uzQID = g_qidMusic;
+	if( m_uzQID < 0 ) {
+		printf( "failed to SysMSGInit()\n" );
+	}
+
+	m_state		= AUDIO_STATE_READY;
+	m_pModalWnd = NULL;
+	m_nStart	= -1;
+	m_nCurrent	= -1;
+	m_nTotal	= 0;
+	m_nAB		= 0;
+	m_pmTitle	= NULL;
+	
+	mep_report( MEP_REPORT_RELATIVE );
+
+#if XEN_LIB
+	CMD_t	CMD;
+	CMD_t	*pCMD;
+	pCMD = &CMD;
+
+	//========== 3D ===========
+	// power on
+	pMpegDecoder->XEN_SetPower( true );
+
+#if 0
+	// surr
+	CMD.nMode = SET_3DPARAMETER;
+	CMD.Param.PARAMETER.TypeNo = XEN_PTYPE_SURR;
+	CMD.Param.PARAMETER.Value = (ePARAM_VALUE)TaviSysParam.sound.surround;
+	pMpegDecoder->XEN_SetEffect( CMD );
+ 	// bass
+	CMD.nMode = SET_3DPARAMETER;
+	CMD.Param.PARAMETER.TypeNo = XEN_PTYPE_BASS;
+	CMD.Param.PARAMETER.Value = (ePARAM_VALUE)TaviSysParam.sound.bass;
+	pMpegDecoder->XEN_SetEffect( CMD );
+#endif
+
+	// set preset to user eq	& each band to last value
+	pMpegDecoder->XEN_Preset( SOUND_SEQ_USER);
+	// band0
+	CMD.nMode = SET_EQPARAMETER;
+	CMD.Param.PARAMETER.TypeNo = EQ_PTYPE_BAND_0;
+	CMD.Param.PARAMETER.Value = (ePARAM_VALUE)(TaviSysParam.sound.band0);
+	pMpegDecoder->XEN_SetEffect( CMD );
+	// band1
+	CMD.nMode = SET_EQPARAMETER;
+	CMD.Param.PARAMETER.TypeNo = EQ_PTYPE_BAND_1;
+	CMD.Param.PARAMETER.Value = (ePARAM_VALUE)(TaviSysParam.sound.band1);
+	pMpegDecoder->XEN_SetEffect( CMD );
+	// band2
+	CMD.nMode = SET_EQPARAMETER;
+	CMD.Param.PARAMETER.TypeNo = EQ_PTYPE_BAND_2;
+	CMD.Param.PARAMETER.Value = (ePARAM_VALUE)(TaviSysParam.sound.band2);
+	pMpegDecoder->XEN_SetEffect( CMD );
+	// band3
+	CMD.nMode = SET_EQPARAMETER;
+	CMD.Param.PARAMETER.TypeNo = EQ_PTYPE_BAND_3;
+	CMD.Param.PARAMETER.Value = (ePARAM_VALUE)(TaviSysParam.sound.band3);
+	pMpegDecoder->XEN_SetEffect( CMD );
+	// band4
+	CMD.nMode = SET_EQPARAMETER;
+	CMD.Param.PARAMETER.TypeNo = EQ_PTYPE_BAND_4;
+	CMD.Param.PARAMETER.Value = (ePARAM_VALUE)(TaviSysParam.sound.band4);
+	pMpegDecoder->XEN_SetEffect( CMD );
+
+	// set preset to last
+	if ( (SOUNDEFFECT_t)TaviSysParam.sound.eq == SOUND_NORMAL )
+		pMpegDecoder->XEN_Preset( SOUND_SEQ_FLAT );				// exchange normal to flat
+	else if ( (SOUNDEFFECT_t)TaviSysParam.sound.eq == SOUND_SEQ_FLAT )
+		pMpegDecoder->XEN_Preset( SOUND_NORMAL );				// exchange flat to normal
+	else
+		pMpegDecoder->XEN_Preset( (SOUNDEFFECT_t)TaviSysParam.sound.eq);
+	
+	//========== 3D ===========
+#endif // XEN_LIB	
+
+	m_szTitle		= MUSIC_TITLE_STRING;
+
+	// Context Menu
+	m_pCtxMenuWnd	= new CContextMenu( this );
+	m_pCtxMenuWnd->SetVisible( false );
+	m_pCtxMenuWnd->Resize( CRect(0, 0, 0, 0), false );
+}
+unsigned long CPlayerWnd::Process_Melon( int err )
+{
+	unsigned long msgId;
+	
+	switch( err ) {
+	case -8L:
+		msgId = ML_MELON_ERR_BAD_DCF;
+		break;
+	case -100L:
+		msgId = ML_MELON_ERR_UNREGISTERD;
+		break;		
+	case -101L:
+		msgId = ML_MELON_ERR_DATE_EXPIRED;
+		break;		
+	case -102L:
+		msgId = ML_MELON_ERR_INVALID_OWN;
+		break;		
+	case -103L:
+		msgId = ML_MELON_ERR_INVALID_TIME;
+		break;		
+	case -200L:
+		msgId = ML_MELON_ERR_INVALID_CLST;
+		break;		
+	case -201L:
+		msgId = ML_MELON_ERR_BAD_CLST;
+		break;		
+	case -202L:
+		msgId = ML_MELON_ERR_CLST_EXPIRED;
+		break;		
+	case -203L:
+		msgId = ML_MELON_ERR_INVALID_DID;
+		break;		
+	case -204L:
+		msgId = ML_MELON_ERR_INVALID_RTC;
+		break;		
+	case -205L:
+		msgId = ML_MELON_ERR_BAD_RTC;
+		break;		
+	default:
+		msgId = ML_FAILED_TO_PLAY;
+		break;
+		}
+
+	return msgId;	
+}
+void CPlayerWnd::Process_Err( AudioCmd* pcmd, int err )
+{
+	AckInfo* pack = ( AckInfo* )pcmd->szArg;
+	char msg[256] = {0,};
+	uchar_t wmsg[256];
+	uchar_t wtmp[256];
+	bool end = true;
+	unsigned long msgId;
+
+
+	memset( wmsg, 0, sizeof(wmsg) );
+	switch( pcmd->lError ) {
+	case AUDIO_ERR_PLAY: 
+		sprintf( msg, "(0x%x)", err );
+		ustrcpy( wmsg, pT->GetTextRes(ML_FAILED_TO_PLAY) );
+		break;
+	case AUDIO_ERR_PAUSE:
+		return; // pass
+	case AUDIO_ERR_RESUME:
+		return; // pass
+	case AUDIO_ERR_SEEK: 
+		return; // pass
+	case AUDIO_ERR_AB:
+		sprintf( msg, "%s", "AB ERROR" );
+		break;
+	case AUDIO_ERR_MELON:
+		msgId = Process_Melon( err );
+		ustrcpy(wmsg, pT->GetTextRes( msgId ) );
+		break;
+	case AUDIO_ERR_FILEOPEN:
+		printf( "FILEOPEN ERROR: 0x%x\n", err );
+	default:
+		sprintf( msg, "(0x%x, 0x%x)", pcmd->lError, pcmd->lCmd );
+		ustrcpy( wmsg, pT->GetTextRes(ML_FAILED_TO_PLAY) );
+	}
+
+  if( m_pPL->GetID() == CPlaylist::PLAYLIST ) {
+    m_nErrCnt++;
+    end = false;
+    if( m_nErrCnt == m_pPL->PlaylistCount() ) {
+      end = true;
+    }
+    else {
+      if( !Next() ) {
+        end = true;
+      }
+    }
+  }
+  
+  if( end ) {
+    str2ustr( wtmp, msg );
+    ustrcat( wmsg, wtmp );
+    m_pMsgBox = new CMsgBox( ML_INFORMATION, _GREEN, wmsg, 244, 123, 
+    		AP_MsgHandler, DL_BG_BLANK );
+    m_pMsgBox->Show();
+    m_state = AUDIO_STATE_STOP;
+    AP_SetPlaystate( m_state );
+    g_PlayKey = 0;
+  }
+}
+
+void CPlayerWnd::Process_ACK( AudioCmd* pcmd )
+{
+	AckInfo* pack = ( AckInfo* )pcmd->szArg;
+	bool visible;
+	
+	// NAK
+	if( pack->done == false ) {
+		Process_Err( pcmd, pack->suberr );
+		return;
+	}
+
+	visible = m_fVisible;
+	if( m_pCtxMenuWnd->IsShow() ) visible = false;
+
+	// ACK
+	switch( pack->cmd ) {
+	case AUDIO_CMD_PLAY:
+		/* TITLE */
+		if( pack->u.play.title.unicode )
+			m_puzTitle->SetText( (uchar_t*)pack->u.play.title.bytes, visible );
+		else 
+			m_puzTitle->SetText( (const char*)(pack->u.play.title.bytes), visible );
+
+		/* ARTIST */
+		if( pack->u.play.artist.unicode ) 
+			m_puzArtist->SetText( (uchar_t*)pack->u.play.artist.bytes, visible );
+		else 
+			m_puzArtist->SetText( (const char*)pack->u.play.artist.bytes, visible );
+
+		/* ALBUM */
+		if( pack->u.play.album.unicode ) 
+			m_puzAlbum->SetText( (uchar_t*)pack->u.play.album.bytes, visible );
+		else 
+			m_puzAlbum->SetText( (const char*)pack->u.play.album.bytes, visible );
+
+		m_puzBottomWnd->UpdatePlayState( CPlayerBottomWnd::PBW_PLAY, visible );
+		m_puzBottomWnd->UpdateCurrentTime( 0, visible );
+		m_puzBottomWnd->UpdateTotalTime( pack->u.play.totaltime, visible );
+
+		g_ExtLCD->SetPlayTitle( m_puzTitle->GetText() );
+		g_ExtLCD->Update();
+
+		if( visible ) Flush();
+
+		m_state = AUDIO_STATE_PLAYING;
+		AP_SetPlaystate( m_state );
+
+		// block EQ when media is WMA or OGG.
+
+		m_media = pack->media;
+		if( m_eq_enable ) {
+			if( m_media == MEDIA_WMA || m_media == MEDIA_OGG ) {
+//				TAVI_CannotSleep( 100 );
+				SetEQ( SOUND_SEQ_FLAT );			// exchanged to normal in SetEQ()
+				m_eq_block = true;
+				m_eq_save = TaviSysParam.sound.eq;
+				TaviSysParam.sound.eq = SOUND_NORMAL;
+			} else {
+				if( m_eq_block ) {
+					TaviSysParam.sound.eq = m_eq_save;
+					SetEQ();
+					m_eq_block = false;
+				}
+//				if( TaviSysParam.power.hddtimer ) TAVI_CanSleep( 100 );
+			}
+			m_puzBottomWnd->UpdateEQ(  true );
+		}
+		break;
+
+	case AUDIO_CMD_STOP:
+		break;
+
+	case AUDIO_CMD_PAUSE:
+		break;
+
+	case AUDIO_CMD_RESUME:
+		break;
+
+	case AUDIO_CMD_SEEK:
+		break;
+
+	case AUDIO_CMD_AB_START:
+		break;
+
+	}
+}
+
+void CPlayerWnd::ProcessQueue( QBUF_t* pBuf )
+{
+	AudioCmd* pCmd = ( AudioCmd* )pBuf;
+	PlaybackInfo* pPlayback = ( PlaybackInfo* )pCmd->szArg;
+	bool visible;
+	int vol;
+	AckInfo* pack = ( AckInfo* )pCmd->szArg;
+
+	// I'll KILL MYSELF AFTER A WHILE.
+	if( m_state == AUDIO_STATE_STOP ) return;
+	
+	if( m_puzBottomWnd->IsSeeking() ) {
+		if( pCmd->lCmd == AUDIO_CMD_ACK ||
+			pCmd->lCmd == AUDIO_CMD_INFO ) m_puzBottomWnd->CancelSeek();
+		else return;
+	}
+
+	visible = m_fVisible;
+	if( m_pCtxMenuWnd->IsShow() ) visible = false;
+	switch( pCmd->lCmd ) {
+	case AUDIO_CMD_ACK:
+		Process_ACK( pCmd );
+		break;
+	case AUDIO_CMD_INFO:
+    		m_state = AUDIO_STATE_STOP;
+		switch( pCmd->lState ) {
+		case AUDIO_STATE_STOP:
+			if( Next() == false ) {
+			    	g_TopPanel->SetPlayMode( CTopPanel::PLAYMODE_STOP );
+				SendMessage( WINDOW_KILL );
+			}
+			break;
+		}
+		break;
+	case AUDIO_CMD_PLAYBACK:
+		if( m_cmd_ready ) break;
+		m_puzBottomWnd->UpdatePlayState( CPlayerBottomWnd::PBW_PLAY, visible );
+		m_puzBottomWnd->UpdateCurrentTime( pPlayback->lTime, m_fVisible );
+		SetMediaInfo( pPlayback->lSamplingrate, pPlayback->lBitrate, pPlayback->lVBR, visible );
+		break;
+	case AUDIO_CMD_MELONPLAYINFO:
+		Process_Err( pCmd, pack->suberr );
+		break;
+// ============== power save ===================		
+	case AUDIO_CMD_SET_EOF:
+		TAVI_CanSleepAudio(100);
+		break;
+	case AUDIO_CMD_CLEAR_EOF:
+		TAVI_CannotSleepAudio(100);
+		break;
+	case AUDIO_CMD_HDD_WAKEUP:
+		TAVI_WakeUp(110);
+		TAVI_CannotSleepAudio(110);
+ 		break;
+// ============== power save ===================				
+	default:
+		printf( "invalid command: %d\n", pCmd->lCmd  );
+	}
+	// 명령이 수행되는 동안은 다른 작업 안함.
+	if( m_cmd_ready ) m_cmd_ready = false;
+}
+
+void CPlayerWnd::OnWindowEvent( const WindowEvent& evt )
+{
+	CEvent event;
+	static int count;
+
+	// If has modal window.
+	switch( evt.nMessage ) {
+
+	case WINDOW_QUEUE:
+		ProcessQueue( (QBUF_t*)evt.nParam );
+		break;
+
+	case ON_ADDTOPLAYLIST:
+		OnAddToPlaylist();
+		break;
+
+	case ON_FOLDER:
+		if( evt.nParam ) { // open
+			g_ExtLCD->ChangeMode( CExtLCD::EXT_STAGE_READY );
+			m_puzBottomWnd->m_fExtLCDEQMode = false;
+		}
+		else { // close
+			g_ExtLCD->ChangeMode( CExtLCD::EXT_STAGE_PLAY );
+		}
+		g_ExtLCD->Update();
+		break;
+
+	case WINDOW_IDLE:
+	  
+		count++;
+		// DISPLAY LEVEL METER
+		if( m_state == AUDIO_STATE_PLAYING ) {
+			pMpegDecoder->XEN_RenderLevelMeter( _LEVELMETER_BASE, _LEVELMETER_UNIT_BG, 50, 152 );
+			AP_Wait( 0, NULL );
+		}
+		
+		if( g_MiscCtrl->FolderClosed() ) {
+			g_ExtLCD->ScrollText();
+		}
+		/* Popup ? */
+		if( m_pMsgBox ) {
+			int handled;
+			handled = m_pMsgBox->MsgProc( 0, 0, 0, 0 );
+			if( handled == 1 ) {
+				SendMessage( WINDOW_KILL );
+			}
+		}
+		if( !(count%10) && !m_pCtxMenuWnd->IsShow() ) {
+      if( m_state != AUDIO_STATE_STOP ) {
+        m_puzTitle->ScrollText();
+      }
+    }
+
+	default:
+		event.type = EVENT_WINDOW;
+		event.u.window = evt;
+		SendEvent( event, m_puzBottomWnd );
+		break;
+	}
+}
+
+void CPlayerWnd::OnPaint( const CRect& rc )
+{
+	if( m_fVisible == false ) return;
+
+	// clear area
+	g_SysPixmap.Fill( rcABS.x1, rcABS.y1, rcABS.GetWidth(), rcABS.GetHeight(), 0 );
+	
+	op_BitBlt( &g_SysPixmap, rcABS.x1+30, rcABS.y1+20, 
+		m_puzImage, 0, 0, m_puzImage->m_nWidth, m_puzImage->m_nHeight );
+
+	// Draw album and artist icon
+	op_BitBlt( &g_SysPixmap, 
+		30+m_puzImage->m_nWidth+8, m_puzArtist->rcABS.y1+4,
+		m_pmArtist, 0, 0, m_pmArtist->m_nWidth, m_pmArtist->m_nHeight );
+	op_BitBlt( &g_SysPixmap,
+		30+m_puzImage->m_nWidth+8, m_puzAlbum->rcABS.y1+4,
+ 		m_pmAlbum, 0, 0, m_pmAlbum->m_nWidth, m_pmAlbum->m_nHeight );
+
+	// draw background of level meter
+	int x = rcABS.x1+30;
+	int y = rcABS.y1+20+m_puzImage->m_nHeight+10;
+	int h = LEVELMETER_BG_HEIGHT;
+	int w = LEVELMETER_BG_WIDTH;
+
+	g_SysPixmap.Fill( x, y, LEVELMETER_BG_WIDTH, LEVELMETER_BG_HEIGHT, _LEVELMETER_BG );
+
+	// clear left-top 
+	g_SysPixmap.Fill( x, y, 4, 1, 0 );
+	g_SysPixmap.Fill( x, y, 1, 4, 0 );
+	g_SysPixmap.Fill( x+1, y+1, 1, 1, 0 );
+	// clear left-bottom
+	g_SysPixmap.Fill( x, y+h-1, 4, 1, 0 );
+	g_SysPixmap.Fill( x, y+h-4, 1, 4, 0 );
+	g_SysPixmap.Fill( x+1, y+h-2, 1, 1, 0 );
+	// clear right-top
+	g_SysPixmap.Fill( x+w-4, y, 4, 1, 0 );
+	g_SysPixmap.Fill( x+w-1, y, 1, 4, 0 );
+	g_SysPixmap.Fill( x+w-2, y+1, 1, 1, 0 );
+	// clear right-bottom
+	g_SysPixmap.Fill( x+w-4, y+h-1, 4, 1, 0 );
+	g_SysPixmap.Fill( x+w-1, y+h-4, 1, 4, 0 );
+	g_SysPixmap.Fill( x+w-2, y+h-2, 1, 1, 0 );
+
+	Flush();
+}
+
+void CPlayerWnd::OnMouseEvent( const MouseEvent& evt )
+{
+	if( m_pMsgBox ) return;
+	
+	if( m_pModalWnd ) { // All event are sended to Modal Window, not other sibling.
+		CEvent event;
+		event.type = EVENT_MOUSE;
+		event.u.mouse = evt;
+		SendEvent( event, m_pModalWnd );
+		return;
+	}
+
+	CEvent event;
+	event.type = EVENT_MOUSE;
+	event.u.mouse = evt;
+	SendEvent( event, m_puzBottomWnd );
+}
+
+void CPlayerWnd::OnKeypressed( const KeyEvent& evt )
+{
+	struct AudioCmd cmd;
+	struct PlayInfo* info;
+	QBUF_t* buf;
+	CEvent event;
+	bool fTouchMenu;
+
+	// check message box
+	if( m_pMsgBox ) {
+		int handled;
+		handled = m_pMsgBox->MsgProc( 0/*dummy*/, MSG_BUTTON_DN, evt.value, 0 );
+		if( handled == 1 ) {
+			SendMessage( WINDOW_KILL );
+			return;
+		}
+		else if( handled == 0 ) return; // eat an event
+	}
+	
+	info = ( struct PlayInfo* )cmd.szArg;
+	buf = ( QBUF_t* )&cmd;
+	cmd.lMsgID = 1;
+	cmd.lLength = sizeof(cmd)-4;
+
+	event.type = EVENT_KEY;
+	event.u.key = evt;
+
+	fTouchMenu = m_puzBottomWnd->IsTouchMenu();
+	SendEvent( event, m_puzBottomWnd );
+	if( fTouchMenu ) {
+		return;
+	}
+	switch( evt.value ) {
+	case VK_EXT_F1: // Speaker On/Off
+		TaviSysParam.sound.speaker_mute = !TaviSysParam.sound.speaker_mute;
+		g_SndCtrl->SpeakerMute( (bool)TaviSysParam.sound.speaker_mute );
+		g_MiscCtrl->AMPEnable( !((bool)TaviSysParam.sound.speaker_mute) );
+		break;
+	case VK_F1:  // EQ
+		if( m_puzBottomWnd->IsSeeking() ) break;
+		ShowPreset();
+		break;
+	case VK_F2: // MENU
+		CreateContextMenu();
+		m_pCtxMenuWnd->SetFocus();
+		break;
+	case VK_F3:  // MODE
+		MSG_Send( m_nTaskID, MSG_WINDOW, m_nWindowID, WINDOW_SET_BG );
+		SetVisible( false );
+		break;
+	case TAVI_KEY_LMODE: // Switch task
+		MSG_Send( m_nTaskID, MSG_WINDOW, m_nWindowID, WINDOW_TASK_SWITCH );
+		SetVisible( false );
+		break;
+	case TAVI_KEY_JOG1_ENTER:
+		if( m_puzBottomWnd->m_fExtLCDEQMode ||
+			m_puzBottomWnd->m_fExtLCDVolMode ) {
+			m_puzBottomWnd->m_fExtLCDEQMode = false;
+			g_ExtLCD->ChangeMode( CExtLCD::EXT_STAGE_PLAY );
+			g_ExtLCD->Update();
+			if( m_puzBottomWnd->m_fExtLCDEQMode ) SetEQ();
+			break;
+		}
+
+		if( g_MiscCtrl->FolderOpen() ) {
+			break;
+		}
+
+	case VK_ESC:  // return to previous menu
+		MSG_Send( m_nTaskID, MSG_WINDOW, m_nWindowID, WINDOW_KILL_FOCUS );
+		break;
+	case VK_EXT_ESC: // exit music menu
+		MSG_Send( m_nTaskID, MSG_WINDOW, m_nWindowID, WINDOW_TASK_KILL_AND_SWITCH );
+		break;
+	case VK_ENTER:
+		if( m_state == AUDIO_STATE_PLAYING ) Pause();
+		else Resume();
+		break;
+	case TAVI_KEY_LENTER:
+	  OnAddToPlaylist();
+	  break;
+	case VK_LEFT: 
+		Prev();
+		break;
+	case VK_RIGHT:
+		Next();
+		break;
+	case VK_F4: // AB
+		m_nAB++;
+		if( m_nAB > AB_AB ) m_nAB = AB_NONE;
+		
+		if( m_nAB == AB_NONE ) {
+			// Stop AB & play
+			m_ab_stime = 0;
+			m_ab_etime = 0;
+			struct ABInfo* cmd = ( struct ABInfo* )&m_uzCmd.szArg;
+			m_ab_etime = m_puzBottomWnd->GetCurrentTime();
+			m_uzCmd.lMsgID = MSG_SEND_ID; // don't set 0
+			m_uzCmd.lCmd = AUDIO_CMD_AB_STOP;
+			m_uzCmd.lLength = sizeof(m_uzCmd) - 4;
+			SysMSGSend( m_uzQID, (QBUF_t*)&m_uzCmd, m_uzCmd.lLength, 0 );
+		} else if( m_nAB == AB_AB ) {
+			// Start AB
+			struct ABInfo* cmd = ( struct ABInfo* )&m_uzCmd.szArg;
+			m_ab_etime = m_puzBottomWnd->GetCurrentTime();
+			// AB time is less than 2sec. cancel AB.
+			if( abs(m_ab_etime-m_ab_stime) < 2 ) { // cancel AB 
+				m_nAB = AB_A;
+				return;
+			}
+			TAVI_WakeUp(120);	// power save
+			cmd->lStartTime = m_ab_stime;
+			cmd->lEndTime = m_ab_etime;
+			m_uzCmd.lMsgID = MSG_SEND_ID; // don't set 0
+			m_uzCmd.lCmd = AUDIO_CMD_AB_START;
+			m_uzCmd.lLength = sizeof(m_uzCmd) - 4;
+			SysMSGSend( m_uzQID, (QBUF_t*)&m_uzCmd, m_uzCmd.lLength, 0 );
+		} else if( m_nAB == AB_A ) {
+			m_ab_stime = m_puzBottomWnd->GetCurrentTime();
+		}
+
+		m_puzBottomWnd->UpdateAB( m_nAB, m_fVisible );
+		if( !m_nAB ) m_puzBottomWnd->UpdateRepeat( m_fVisible );
+
+		if( m_nAB == AB_AB ) 
+			m_puzBottomWnd->UpdateCurrentTime( m_ab_stime, true );
+		break;
+	}
+}
+
+void CPlayerWnd::SetFileCount( int nCurrent, int nTotal, bool fUpdate )
+{
+	#if 0
+	char buf[100] = {0,};
+	m_nTotal = nTotal;
+	m_nCurrent = nCurrent;
+	sprintf( buf, "%03d/%03d", m_nCurrent, m_nTotal );
+	m_puzCount->SetText( buf, fUpdate );
+	#endif
+}
+
+
+void CPlayerWnd::SetMediaInfo( int nSamplingRate, int nBitrate, bool vbr, bool fUpdate )
+{
+	char buf[128] = {0,};
+	char* types[] = { "", "MP3", "WMA", "OGG", "MP3" };
+
+	m_samplingrate = nSamplingRate;
+	m_bitrate = nBitrate;
+	m_vbr = vbr;
+	if( m_vbr ) {
+		if (m_bitrate/1000) {
+			sprintf( buf, "%s  %dKHz  %dKbps [VBR]", types[m_media], m_samplingrate/1000, m_bitrate/1000 );
+		} else {
+			sprintf( buf, "%s  %dKHz [VBR]", types[m_media], m_samplingrate/1000 );
+		}
+	} else {
+		if (m_bitrate/1000) {
+			sprintf( buf, "%s  %dKHz  %dKbps", types[m_media], m_samplingrate/1000, m_bitrate/1000 );
+		} else {
+			sprintf( buf, "%s  %dKHz", types[m_media], m_samplingrate/1000 );
+		}
+	}
+	m_puzInfo->SetText( buf, fUpdate );
+
+	if( fUpdate ) m_puzInfo->Show();
+}
+
+void CPlayerWnd::SendPlayCmd( const uchar_t* filename )
+{
+	/* If selected a playing file.
+	 */
+	TAVI_CannotSleepAudio(150);	// power save
+	 
+	struct PlayInfo* pInfo = ( struct PlayInfo* )&m_uzCmd.szArg;
+	pInfo->lStartTime = 0;
+	ustrcpy( (uchar_t*)pInfo->szFilename, (uchar_t*)filename );
+	int key = CDeviceMusicDB::Generate_Key( (LPWSTR)filename );
+	if( key == g_PlayKey ) {
+		DEBUGMSG( "SAME KEY...0x%08lx == 0x%08lx\n", g_PlayKey, key );
+		return;
+	}
+	g_PlayKey = key;
+	SendCmd( AUDIO_CMD_PLAY );
+
+	// clear ab
+	m_nAB = AB_NONE;
+	m_ab_stime = 0;
+	m_ab_etime = 0;
+  m_state = AUDIO_STATE_BUSY;
+
+	m_szPlaypath = filename;
+	m_szPlayfile.SetString(GetFilename((char*)filename, true, true), true);
+
+	g_TopPanel->SetPlayMode( CTopPanel::PLAYMODE_PLAY );
+
+  // set current play time to 0.
+  m_puzBottomWnd->UpdateCurrentTime( 0, true );
+	if( m_fVisible ) {
+		g_TopPanel->SetTitle( m_szPlayfile );
+		g_TopPanel->Update();
+		m_puzBottomWnd->UpdateAB( m_nAB, true );
+		m_puzBottomWnd->UpdateRepeat( true );
+		Flush();
+	}
+}
+
+void CPlayerWnd::Play( int type, const CString& base, CDeviceMusicDB* handle, const CString& filepath )
+{
+	QBUF_t* buf = ( QBUF_t* )&m_uzCmd;
+	struct PlayInfo* pPlayInfo = ( struct PlayInfo* )&m_uzCmd.szArg;
+	bool success = true;
+	int err;
+	CString tmp = filepath;
+	CString filename;
+	char* name;
+
+  m_nErrCnt = 0;
+	memset( (void*)&m_uzCmd, 0, sizeof(m_uzCmd) );
+
+	// TODO: SHOW WAIT MESSAGE
+	
+	int major = type&0xfff0;
+	int minor = type&0x000f;
+	int sort = TaviSysParam.sort;
+	int boundary = TaviSysParam.music.boundary;
+	int repeat = TaviSysParam.music.repeat;
+	int shuffle = TaviSysParam.music.shuffle;
+
+	switch( major ) {
+
+	case TYPE_FOLDER:
+		if( !g_FolderPL ) g_FolderPL = new CFolderPL( base, sort );
+		else g_FolderPL->SetSort( sort );
+		m_pPL = g_FolderPL;
+		tmp.Shear( (uchar_t)'/', CString::TAIL );
+		name = GetFilename((const char*)filepath, true, true );
+		filename.SetString( name, true );
+		break;
+
+	case TYPE_MUSICDB:
+		if( !g_MusicDBPL ) g_MusicDBPL = new CMusicDBPL( handle, minor, sort );
+		else {
+			if( g_MusicDBPL->SetType( minor ) ) {
+				//SendCmd( AUDIO_CMD_STOP );
+			}
+			g_MusicDBPL->SetSort( sort );
+		}
+		m_pPL = g_MusicDBPL;
+		tmp = base;
+		filename = filepath;
+		break;
+
+	case TYPE_PLAYLIST:
+		if( !g_PlaylistPL ) {
+		    g_PlaylistPL = new CPlaylistPL( "", sort );
+	    }
+		m_pPL = g_PlaylistPL;
+		tmp = base;
+		filename = filepath;
+		break;
+
+	default:
+		// TODO: SHOW ERROR MESSAGE
+		err = 0x01;
+		success = false;
+		goto __end;
+	}
+
+	m_pPL->SetBoundary( boundary );
+	m_pPL->SetRepeat( repeat );
+	m_pPL->SetShuffle( shuffle );
+	
+	if( m_pPL->SetCurrentDir( tmp ) == false ) {
+		err = 0x02;
+		success = false;
+		goto __end;
+	}
+	
+	if( m_pPL->MakePlaylist() == -1 ) {
+		err = 0x03;
+		success = false;
+		goto __end;
+	}
+
+	if( m_pPL->SetCurrentFile( filename ) == false ) {
+		err = 0x04;
+		success = false;
+		goto __end;
+	}
+
+__end:
+	if( success == false ) {
+		char buf[128];
+		uchar_t wbuf[128];
+		uchar_t wbuf2[20];
+		sprintf( buf, "(0x%x)", err );
+		str2ustr( wbuf2, buf );
+		ustrcpy( wbuf, pT->GetTextRes(ML_FAILED_TO_PLAY ) );
+		ustrcat( wbuf, wbuf2 );
+		m_pMsgBox = new CMsgBox( ML_INFORMATION, _GREEN, wbuf, 244, 123, AP_MsgHandler, DL_BG_BLANK );
+		m_pMsgBox->Show();
+		return;
+	}
+
+	uchar_t* currentfile = m_pPL->GetCurrentFile();
+	TAVI_WakeUp( 100 );
+	SendPlayCmd( currentfile );
+}
+
+void CPlayerWnd::Seek( int sec, int dir )
+{
+	TAVI_WakeUp(140);	// power save
+	m_puzBottomWnd->m_fSeek = false;
+	TaviSysParam.music.startTime = sec;
+	
+	QBUF_t* buf = ( QBUF_t* )&m_uzCmd;
+	struct PlayInfo* pPlayInfo = ( struct PlayInfo* )&m_uzCmd.szArg;
+
+	memset( (void*)&m_uzCmd, 0, sizeof(m_uzCmd) );
+	pPlayInfo->lStartTime = TaviSysParam.music.startTime;
+
+	m_uzCmd.lMsgID = MSG_SEND_ID; // don't set 0
+	m_uzCmd.lLength = sizeof(m_uzCmd) - 4;
+	m_uzCmd.lCmd = AUDIO_CMD_SEEK;
+
+	SysMSGSend( m_uzQID, buf, buf->lLength, 0 );
+
+	if( m_nAB ) {
+		m_nAB = 0;
+		m_puzBottomWnd->UpdateAB( m_nAB, false );
+		m_puzBottomWnd->UpdateRepeat( true );
+	}
+
+	m_cmd_ready = true;
+}
+
+
+bool CPlayerWnd::Prev( void )
+{
+	TAVI_WakeUp( 100 );
+	bool success = false;
+
+	if( m_puzBottomWnd->GetCurrentTime() > 2 ) {
+		// goto to first
+		Seek( 0, 0 );
+		success = true;
+	}
+	else {
+		uchar_t* filepath = (uchar_t*)m_pPL->GetPrev();
+		
+		if( filepath ) {
+			g_PlayKey = 0;
+			SendPlayCmd( (const uchar_t*)filepath );
+			success = true;
+		}
+	}
+	
+	return success;
+}
+
+bool CPlayerWnd::Next( void )
+{
+    bool success = false;
+    uchar_t* filepath;
+
+	TAVI_WakeUp( 100 );
+	filepath = (uchar_t*)m_pPL->GetNext();
+	
+	if( filepath ) {
+		g_PlayKey = 0;
+		SendPlayCmd( (const uchar_t*)filepath );
+		success = true;
+	}
+
+	return success;
+}
+
+void CPlayerWnd::Pause( void )
+{
+    if( m_state == AUDIO_STATE_BUSY ) return;
+    
+	memset( (void*)&m_uzCmd, 0, sizeof(m_uzCmd) );
+	SendCmd( AUDIO_CMD_PAUSE );
+	m_state = AUDIO_STATE_PAUSE;
+	AP_SetPlaystate( m_state );
+
+	m_puzBottomWnd->UpdatePlayState( CPlayerBottomWnd::PBW_PAUSE, m_fVisible );
+	g_TopPanel->SetPlayMode( CTopPanel::PLAYMODE_PAUSE );
+	g_TopPanel->Update();
+	if( m_fVisible ) Flush();
+}
+
+void CPlayerWnd::Show( void )
+{
+	extern int handle_key;
+	ioctl( handle_key, TAVI_KEY_IOCS_REPEATMODE, 0 );
+	ioctl( handle_key, TAVI_KEY_IOCS_SINGLEEVENT, 0 );
+	
+	m_puzBottomWnd->SetVisible( true );
+	CWindow::Show();
+	g_TopPanel->SetTitle( m_szPlayfile );
+	g_TopPanel->Show();
+
+	if( g_MiscCtrl->FolderClosed() ) {
+		g_ExtLCD->ChangeMode( CExtLCD::EXT_STAGE_PLAY );
+		g_ExtLCD->Update();
+	}
+
+	mep_eat_event();
+	if( readytodie ) {
+		if( m_pCtxMenuWnd->IsShow() == false ) {
+			SendMessage( WINDOW_KILL );
+			readytodie = false;
+		}
+	}
+	g_ExtLCD->ResetScroll();
+	ClearKeyBuffer();
+}
+
+void CPlayerWnd::Hide( void )
+{
+	extern int handle_key;
+	CWindow::Hide();
+	m_puzBottomWnd->SetVisible( false );
+	ioctl( handle_key, TAVI_KEY_IOCS_REPEATMODE, 1 );
+	ioctl( handle_key, TAVI_KEY_IOCS_SINGLEEVENT, 1 );
+}
+
+void CPlayerWnd::OnAddToPlaylist( void )
+{
+	M3UHandle hM3U;
+	CString playlist = INSTANCE_PLAYLIST;
+	CPixmap pm( g_SysPixmap );
+
+	CMsgBox* pmsgbox;
+
+	pmsgbox = new CMsgBox( 
+	              ML_INFORMATION, 
+	              _ORANGE, 
+	              ML_ADD_TO_IPLAYLIST, 
+	              200, 80, 0, DL_BG_BLANK );
+  pmsgbox->Show();
+
+  TAVI_WakeUp( 100 );
+  for( int i=0; i<10; i++ ) {
+    sleep( 1 );
+  }
+
+	playlist.toUTF16();
+	hM3U = M3UInit( (uchar_t*)playlist, M3U_APPEND );
+	if( hM3U == 0 ) {
+		hM3U = M3UCreate( (uchar_t*)playlist );
+		M3UClose( hM3U );
+		hM3U = M3UInit( (uchar_t*)playlist, M3U_APPEND );
+	}
+	if( !hM3U ) {
+		TAVI_DEBUGMSG( "failed to open M3U file!!\n" );
+		// show error message
+		return;
+	}
+
+  M3UTag tag;
+	uchar_t* name = (uchar_t*)m_szPlayfile;
+	tag.m_nTime = 0;
+	tag.m_szPath = (char*)m_szPlaypath+8; // remove /hd1
+	tag.m_nPathLen = ustrlen((uchar_t*)tag.m_szPath)*2;
+	tag.m_szTitle = ( char* )name;
+	tag.m_nTitleUnicode = true;
+	tag.m_nTitleLen = ustrlen(name)*2;
+	
+	M3UAdd( hM3U, &tag );
+	M3UClose( hM3U );
+	delete pmsgbox;
+	op_BitBlt( &g_SysPixmap, 0, 0, &pm, 0, 0, pm.m_nWidth, pm.m_nHeight );
+	Flush();
+
+	return;
+}
+
+void CPlayerWnd::IncVol( void )
+{
+	int level = g_SndCtrl->GetVolume();
+	level++;
+	m_puzBottomWnd->SetVolume( level ); // 0 ~ 79
+}
+
+void CPlayerWnd::DecVol( void )
+{
+	int level = g_SndCtrl->GetVolume();
+	level--;
+	m_puzBottomWnd->SetVolume( level );
+}
+
+void CPlayerWnd::SetEQ( int EQ )
+{
+#if XEN_LIB	
+	if( EQ == -1 ) 
+		EQ = TaviSysParam.sound.eq;
+
+	if( EQ == SOUND_eXTX_PRESET ) {
+		if( g_MiscCtrl->HeadphoneIN() ) {
+			EQ = SOUND_REX_WIDE_PRESET;
+		}
+	}
+	
+	if ( EQ == SOUND_NORMAL )
+		pMpegDecoder->XEN_Preset( SOUND_SEQ_FLAT );		// exchange normal to flat
+	else if ( EQ == SOUND_SEQ_FLAT )
+		pMpegDecoder->XEN_Preset( SOUND_NORMAL );		// exchange flat to normal
+	else
+		pMpegDecoder->XEN_Preset( (SOUNDEFFECT_t)EQ );
+
+	switch( EQ ) {
+	case SOUND_MEX_USER:
+	case SOUND_REX_WIDE_USER:
+	case SOUND_REX_LIVE_USER:
+		PLAYER->Set2BandEQ( (SOUNDEFFECT_t)EQ-SOUND_REX_WIDE_USER, 0 );
+		PLAYER->Set2BandEQ( (SOUNDEFFECT_t)EQ-SOUND_REX_WIDE_USER, 1 );
+		break;
+	default:
+		break;
+	}
+#endif // XEN_LIB
+}
+
+void CPlayerWnd::Resume( void )
+{
+    if( m_state == AUDIO_STATE_BUSY ) return;
+    
+	TAVI_WakeUp( 100 );
+	if( m_state == AUDIO_STATE_PLAYING ) return;
+	struct PlayInfo* pPlayInfo = ( struct PlayInfo* )&m_uzCmd.szArg;
+
+	memset( (void*)&m_uzCmd, 0, sizeof(m_uzCmd) );
+	SendCmd( AUDIO_CMD_RESUME );
+	m_state = AUDIO_STATE_PLAYING;
+	AP_SetPlaystate( m_state );
+
+	m_puzBottomWnd->UpdatePlayState( CPlayerBottomWnd::PBW_PLAY, m_fVisible );
+	g_TopPanel->SetPlayMode( CTopPanel::PLAYMODE_PLAY );
+	g_TopPanel->Update();
+	if( m_fVisible ) Flush();
+
+}
+
+static void DoRepeat( CPlayerWnd* pPlayer, int onoff )
+{
+	TaviSysParam.music.repeat = onoff;
+	pPlayer->m_pPL->SetRepeat( onoff );
+}
+
+static int RepeatOn( RMuint8* arg )
+{
+	CPlayerWnd* pPlayer = ( CPlayerWnd* )arg;
+	pPlayer->m_pCtxMenuWnd->Hide();
+	DoRepeat( pPlayer, 1 );
+	
+	return 0;
+}
+
+static int RepeatOff( RMuint8* arg )
+{
+	CPlayerWnd* pPlayer = ( CPlayerWnd* )arg;
+	pPlayer->m_pCtxMenuWnd->Hide();
+	DoRepeat( pPlayer, 0 );
+	
+	return 0;
+}
+
+static void DoShuffle( CPlayerWnd* pPlayer, int onoff )
+{
+	TaviSysParam.music.shuffle = onoff;
+	pPlayer->m_pPL->SetShuffle( onoff );
+}
+
+static int ShuffleOn( RMuint8* arg )
+{
+	CPlayerWnd* pPlayer = ( CPlayerWnd* )arg;
+	pPlayer->m_pCtxMenuWnd->Hide();
+	DoShuffle( pPlayer, 1 );
+	return 0;
+}
+
+static int ShuffleOff( RMuint8* arg )
+{
+	CPlayerWnd* pPlayer = ( CPlayerWnd* )arg;
+	pPlayer->m_pCtxMenuWnd->Hide();
+	DoShuffle( pPlayer, 0 );
+	return 0;
+}
+
+static void DoBoundary( CPlayerWnd* pPlayer, int boundary )
+{
+	TaviSysParam.music.boundary = boundary;
+	pPlayer->m_pPL->SetBoundary( boundary );
+}
+
+static int PlayAll( RMuint8* arg )
+{
+	CPlayerWnd* pPlayer = ( CPlayerWnd* )arg;
+	pPlayer->m_pCtxMenuWnd->Hide();
+	DoBoundary( pPlayer, CPlaylist::BOUNDARY_ALL );	
+	return 0;
+}
+
+static int PlayCategory( RMuint8* arg )
+{
+	CPlayerWnd* pPlayer = ( CPlayerWnd* )arg;
+
+	pPlayer->m_pCtxMenuWnd->Hide();
+	DoBoundary( pPlayer, CPlaylist::BOUNDARY_CATEGORY );
+	return 0;
+}
+
+static int PlaySingle( RMuint8* arg )
+{
+	CPlayerWnd* pPlayer = ( CPlayerWnd* )arg;
+
+	pPlayer->m_pCtxMenuWnd->Hide();
+	DoBoundary( pPlayer, CPlaylist::BOUNDARY_ONE );	
+	return 0;
+}
+
+static int AddToPlaylist( RMuint8* arg )
+{
+  CPlayerWnd* pPlayer = ( CPlayerWnd* )arg;
+
+	pPlayer->m_pCtxMenuWnd->Hide();
+	pPlayer->OnAddToPlaylist();
+  return 0;
+}
+
+void CPlayerWnd::CreateContextMenu( void )
+{
+	m_pCtxMenuWnd->Reset();
+	m_pCtxMenuWnd->m_pCtxMenu->AddSubMenu( 
+	    ML_ADD_TO_IPLAYLIST, NULL, -1, 
+	    AddToPlaylist, (RMuint8*)this );
+	CPopUpSubMenu* pSubMenu = new CPopUpSubMenu;
+	pSubMenu->AddSubMenuItem( ML_ALL, 0, PlayAll, (RMuint8*)this );
+	pSubMenu->AddSubMenuItem( ML_CATEGORY, 0, PlayCategory, (RMuint8*)this );
+	pSubMenu->AddSubMenuItem( ML_SINGLE, 0, PlaySingle, (RMuint8*)this );
+	pSubMenu->PointedMenuItemIdx = TaviSysParam.music.boundary;
+	m_pCtxMenuWnd->m_pCtxMenu->AddSubMenu( ML_BOUNDARY, pSubMenu, TaviSysParam.music.boundary, NULL, NULL );
+	pSubMenu = new CPopUpSubMenu;
+	pSubMenu->AddSubMenuItem( ML_ON, 0, RepeatOn, (RMuint8*)this );
+	pSubMenu->AddSubMenuItem( ML_OFF, 0, RepeatOff, (RMuint8*)this );
+	pSubMenu->PointedMenuItemIdx = !TaviSysParam.music.repeat;
+	m_pCtxMenuWnd->m_pCtxMenu->AddSubMenu( ML_REPEAT, pSubMenu, !TaviSysParam.music.repeat, NULL, NULL );
+	pSubMenu = new CPopUpSubMenu;
+	pSubMenu->AddSubMenuItem( ML_ON, 0, ShuffleOn, (RMuint8*)this );
+	pSubMenu->AddSubMenuItem( ML_OFF, 0, ShuffleOff, (RMuint8*)this );
+	pSubMenu->PointedMenuItemIdx = !TaviSysParam.music.shuffle;
+	m_pCtxMenuWnd->m_pCtxMenu->AddSubMenu( ML_SHUFFLE, pSubMenu, !TaviSysParam.music.shuffle, NULL, NULL );
+
+
+	extern int handle_key;
+	ioctl( handle_key, TAVI_KEY_IOCS_REPEATMODE, 1 );
+	ioctl( handle_key, TAVI_KEY_IOCS_SINGLEEVENT, 1 );
+}
+
+void CPlayerWnd::SendCmd( int cmd )
+{
+	AudioCmd* pCmd = ( AudioCmd* )&m_uzCmd;
+	QBUF_t* buf = ( QBUF_t* )pCmd;
+	pCmd->lMsgID = MSG_SEND_ID; // don't set 0
+	pCmd->lLength = sizeof(AudioCmd) - 4;
+	pCmd->lCmd = cmd;
+	SysMSGSend( m_uzQID, buf, buf->lLength, 0 );
+}
+
+void CPlayerWnd::OnKeyReleased( const KeyEvent& evt )
+{
+	CEvent event;
+	event.type = EVENT_KEY;
+	event.u.key = evt;
+	SendEvent( event, m_puzBottomWnd );
+}
+
+void CPlayerWnd::Set2BandEQ( int row, int sel )
+{
+	int nTypeNo = sel + XEN_PTYPE_SURR;
+	int nValue;
+	if( sel == 0 ) { // surround
+		switch( row ) {
+		case 0: nValue = TaviSysParam.sound.surround_rex_wide; break;
+		case 1: nValue = TaviSysParam.sound.surround_rex_live; break;
+		case 2: nValue = TaviSysParam.sound.surround_mex; break;
+		default: nValue = 3;
+		}
+	}
+	else {
+		switch( row ) {
+		case 0: nValue = TaviSysParam.sound.bass_rex_wide; break;
+		case 1: nValue = TaviSysParam.sound.bass_rex_live; break;
+		case 2: nValue = TaviSysParam.sound.bass_mex; break;
+		default: nValue = 3;
+		}
+	}
+
+#if XEN_LIB
+	CMD_t CMD;
+	CMD.nMode = SET_3DPARAMETER;
+	CMD.Param.PARAMETER.TypeNo = (ePARAM_TYPE)nTypeNo;
+	CMD.Param.PARAMETER.Value = (ePARAM_VALUE)nValue;
+	pMpegDecoder->XEN_SetEffect( CMD );
+#endif // XEN_LIB
+	
+}
+
+void CPlayerWnd::Set5BandEQ( int sel )
+{
+	int nBand = EQ_PTYPE_BAND_0 + sel;
+	int nValue = ((char*)&TaviSysParam.sound.band0)[sel];
+
+#if XEN_LIB
+	CMD_t CMD;
+	CMD.nMode = SET_EQPARAMETER;
+	CMD.Param.PARAMETER.TypeNo = (ePARAM_TYPE)nBand;
+	CMD.Param.PARAMETER.Value = (ePARAM_VALUE)nValue;
+	pMpegDecoder->XEN_SetEffect( CMD );
+
+#endif // XEN_LIB
+}
+
+static int ApplyEQ( int* arg )
+{
+	int param = *arg;
+	SOUNDEFFECT_t output = (SOUNDEFFECT_t)TaviSysParam.sound.eq;
+	PLAYER->SetEQ( TaviSysParam.sound.eq );
+}
+
+void CPlayerWnd::ShowPreset( void )
+{
+	if( !m_eq_enable || m_eq_block ) return;
+	
+	m_puzBottomWnd->SetVisible( false );
+	if( !g_pSndPalette ) {
+		g_pSndPalette = new CSoundPaletteDbx( 
+			ML_SOUND_PALETTE, 
+			10-1, 35-1, 
+			320-(10*2)-1, 240-35-10-1, 
+			ApplyEQ, 0 );
+	}
+	g_pSndPalette->Show();
+}
+
+void CPlayerWnd::SetFocus( void )
+{
+	if( g_pSndPalette && g_pSndPalette->IsVisible() ) {
+		return;
+	}
+	CWindow::SetFocus();
+}
+
+void CPlayerWnd::EnableEQ( bool enable, int eq )
+{
+	if( m_eq_enable == enable ) return;
+	m_eq_enable = enable;
+
+	if( m_eq_enable ) {
+		// 스피커 모드인 경우 EQ적용이 안됨.
+		if( g_TopPanel->GetSpeakerOnOff() ) {
+			m_eq_enable = false;
+			return;
+		}
+		TaviSysParam.sound.eq = m_eq_save;
+		SetEQ();
+	} else {
+		m_eq_save = TaviSysParam.sound.eq;
+		TaviSysParam.sound.eq = eq;
+		SetEQ();
+	}
+	m_puzBottomWnd->UpdateEQ(  true );
+}
+
+/* FIN */

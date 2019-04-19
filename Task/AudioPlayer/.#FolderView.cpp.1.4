@@ -1,0 +1,680 @@
+//************************ Copyright(C) New Media Life Inc. ************************
+//
+// Description : FolderView class definition
+// 
+// $Source: /home/cvsroot/TAVI020/tavi/Task/AudioPlayer/FolderView.cpp,v $
+// $Revision: 1.4 $
+// $Date: 2006/05/10 02:25:56 $
+// $Author: zstein $ Lee Seok<zstein@newmedialife.com>
+//
+//******************************************************************************
+// $Log: FolderView.cpp,v $
+// Revision 1.4  2006/05/10 02:25:56  zstein
+// - added AP_Wait() while reading files and folders.
+//
+// Revision 1.3  2006/04/17 04:28:12  zstein
+// - added SetTopTitle() method and fixed TaviCast bug.
+//
+// Revision 1.2  2006/04/15 01:22:44  zstein
+// - TAVICAST.
+//
+// Revision 1.1.1.1  2006/02/22 12:33:31  zstein
+// TAVI020 REBUILD
+//*******************************************************************************
+#include <sys/time.h>
+#include <unistd.h>
+
+#include "FolderView.h"
+#include "PlayerWnd.h"
+#include "AudioPlayer.h"
+#include "MP3HeaderInfo.h"
+#include "ID3/libid3.h"
+#include "Component/FileUtil.h"
+#include "Component/ProgressDlg.h"
+#include "Lib/LibImage.h"
+#include "Task/tavi_global.h"
+#include "Task/ExtLCD.h"
+#include "Task/Msg.h"
+
+#include <fatfs.h>
+#include "MusicDB.h"
+#include "musicdef.h"
+
+// Macros
+
+// Extern variables
+extern BITMAPFILEINFO256 TAVI_IMAGES[];
+extern CTextEngine_BDF* pT;
+extern CTopPanel* g_TopPanel;
+extern CExtLCD* g_ExtLCD;
+// Local variables
+
+// Local methods
+
+CFolderView::CFolderView( CWindow* parent, CString& szRootPath, int sort, bool bSave ) :
+	CListView( parent, TaviSysParam.sort ),
+	m_nSort( sort ),
+	m_bSave( bSave )
+{
+	Init( szRootPath );
+}
+
+CFolderView::~CFolderView( void )
+{
+	// NOTE: DON'T delete m_pBottomWnd
+	// CWindow::~CWindow() will delete her children
+	if( m_bSave ) {
+    	memset( TaviSysParam.music.lastaccess, 0, sizeof(TaviSysParam.music.lastaccess) );
+    	ustrcpy( (uchar_t*)TaviSysParam.music.lastaccess, (uchar_t*)m_szCurrentDir );
+    }
+}
+
+void CFolderView::Init( CString& szRootPath )
+{
+	uchar_t* wsz;
+	RMuint32 fd;
+	FATFS_ERROR err;
+
+	// check valid path
+	wsz = new uchar_t[MAX_PATH];
+	memset( wsz, 0, MAX_PATH );
+
+	err = fatfs_wdopen( (uchar_t*)szRootPath, &fd );
+	if( err != FATFS_ERROR_NO_ERROR ) {
+	    char buf[MAX_PATH];
+	    ustr2str( buf, (uchar_t*)szRootPath );
+	    if( strcmp(buf, TAVICAST_DIR) ) {
+    		str2ustr( wsz, _AUDIO_DIR, strlen(_AUDIO_DIR) );
+        }
+	}
+	else {
+		ustrcpy( wsz, (uchar_t*)szRootPath );
+	}
+	fatfs_dclose( fd );
+	
+	m_szCurrentDir.SetString( (char*)wsz, true );
+
+	int slashcnt = 0;
+	int i=0, j=0;
+	CString path;
+	uchar_t tmp[1024];
+	while( 1 ) {
+		if( wsz[i] == '/' ) {
+			tmp[j] = 0;
+			path.SetString( (char*)tmp, true );
+			slashcnt++;
+			if( slashcnt > 2 ) {
+				FolderPrev p = { path, 0, 0 };
+				m_Stack.Push( p );
+			}
+			tmp[j++] = wsz[i];
+		}
+		else if( wsz[i] == 0 ) {
+			break;
+		}
+		else {
+			tmp[j] = wsz[i];
+			j++;
+		}
+		i++;
+	}
+
+	if( ScanDir( m_szCurrentDir ) == false ) {
+		SendMessage( WINDOW_KILL );
+	}
+	m_nOffset = 13;
+	m_nListCount = 8;
+
+	m_pCtxMenuWnd = new CContextMenu( this );
+	m_pCtxMenuWnd->SetVisible( false );
+
+	delete[] wsz;
+
+	// Loading Folder list
+	if( TaviSysParam.music.updatefolder || !g_FolderPL ) {
+		CProgressDlg* progress;
+		CString sz = "Loading database...";
+		progress = new CProgressDlg( NULL, "Load Music Library..." );
+		progress->Resize( CRect(10, 80, 312, 160), false );
+		progress->Show();
+		progress->Update( sz, -1 );
+		if( g_FolderPL ) delete g_FolderPL;
+	
+		// Loading Folder playlist
+		CString base = MUSIC_BASE;
+		base.toUTF16();
+		g_FolderPL = new CFolderPL( 
+						base, 
+						TaviSysParam.sort,
+						NULL );
+		delete progress;
+
+		TaviSysParam.music.updatefolder = 0;
+	}
+}
+
+bool CFolderView::ScanDir( CString& szPath )
+{
+	bool ret=true;
+	int nCount;
+	int type;
+	CListItem* puzItem;
+	CList< CListItem >::PFN_Compare pFNCompare=NULL;
+	FATFS_ERROR sdFatfsErr;
+	FATFS_DIR_ENTRY_INFO info;
+	RMuint32 sdDirFD;
+	int nMedia;
+	uchar_t* szFullPath;
+	uchar_t playlist[20];
+
+	str2ustr( playlist, "PLAYLIST" );
+	
+	TAVI_WakeUp(195);		// power save
+
+	m_uzList.FreeAll();
+	//m_nStartIdx = 0;
+	//m_nSelectedIdx = 0;
+	nCount = 0;
+	m_nFolders = 0;
+	szFullPath = new uchar_t[1024];
+	sdFatfsErr = fatfs_wdopen( (uchar_t*)szPath, &sdDirFD );
+	if( sdFatfsErr != FATFS_ERROR_NO_ERROR ) {
+	    ret = false;
+	    goto __end;
+    }
+	
+	while( (sdFatfsErr=fatfs_dread(sdDirFD, &info)) == FATFS_ERROR_NO_ERROR ) {
+	  AP_Wait( 0, 0 );
+		if( ustrcmp((uchar_t*)info.name, (uchar_t*)".\0") == 0 ) continue;
+		if( ustrcmp((uchar_t*)info.name, (uchar_t*)".\0.\0") == 0 ) continue;
+
+		if( info.attributes&0x10 ) {
+			type = NODE_TYPE_FOLDER;
+		} else {
+			nMedia = CheckMedia(info.name, true);
+			switch( nMedia ) {
+			case MEDIA_MP3:
+			case MEDIA_OGG:
+			case MEDIA_WMA:
+			case MEDIA_DCF_MP3:
+				break;
+			default:
+				continue;
+			}
+			type = NODE_TYPE_FILE;
+		}
+
+		if( type == NODE_TYPE_FOLDER ) {
+			if( ustrcasecmp( playlist, (uchar_t*)info.name ) == 0 ) continue; // except PLAYLIST 
+			puzItem = new CListItem( nCount, LII_FOLDER_U, LII_FOLDER_S, (char*)info.name, true );
+			puzItem->m_nkey = 0;
+		} else {
+			puzItem = new CListItem( nCount, LII_MUSIC_U, LII_MUSIC_S, (char*)info.name, true ); 
+			// set fullpath for genrating a key
+			ustrcpy( szFullPath, (uchar_t*)szPath );
+			ustrcat( szFullPath, (uchar_t*)"/\0\0" );
+			ustrcat( szFullPath, (uchar_t*)info.name );
+			puzItem->m_nkey = CDeviceMusicDB::Generate_Key( (LPWSTR)szFullPath );
+		}
+
+		puzItem->m_nDate = info.file_write_date<<16|info.file_write_time;
+		puzItem->m_nType = type;
+		AddItem( (CListItem*)puzItem );
+		nCount++;
+		if( nCount == MAX_FILES ) break;
+	}
+
+	fatfs_dclose( sdDirFD );
+	Sort( TaviSysParam.sort );
+	SetTopTitle();
+__end:	
+	ResetScrollBar();
+	delete[] szFullPath;
+
+	return ret;
+}
+
+void CFolderView::OnKeypressed( const KeyEvent& evt )
+{
+	CListItem* puzItem;
+	KeyEvent kevt;
+
+	kevt = evt;
+	
+	switch( kevt.value ) {
+
+	case TAVI_KEY_JOG2_UP:
+		if ( g_MiscCtrl->FolderOpen() ) {
+			AP_Next();
+		} else {
+			kevt.value = VK_DOWN;
+		}
+		break;
+
+	case TAVI_KEY_JOG2_DOWN:
+		if ( g_MiscCtrl->FolderOpen() ) {
+			AP_Prev();
+		} else {
+			kevt.value = VK_UP;
+		}
+		break;
+
+	case TAVI_KEY_JOG2_ENTER:
+
+		if( g_MiscCtrl->FolderOpen() ) {
+			if( AP_GetPlayState() == AUDIO_STATE_PAUSE )
+				AP_Resume();
+			else
+				AP_Pause();
+			break;
+		}
+
+	case VK_RIGHT:
+	case VK_ENTER:
+		puzItem = ( CListItem* )GetSelectedItem();
+		if( !puzItem ) return;
+		if( puzItem->m_nType == NODE_TYPE_FOLDER ) {
+			FolderPrev p = { m_szCurrentDir, m_nStartIdx, m_nSelectedIdx };
+			m_Stack.Push( p );
+			m_szCurrentDir.Add( (uchar_t*)"/\0\0\0" );
+			m_szCurrentDir.Add( puzItem->m_szText );
+			m_nSelectedIdx = 0;
+			m_nStartIdx = 0;
+			ScanDir( m_szCurrentDir );
+			OnPaint( rcClient );
+		} else { // item is a file. Run player
+			CString fullpath;
+			fullpath = m_szCurrentDir;
+			fullpath.Add( (uchar_t*)"/\0" );
+			fullpath.Add( puzItem->m_szText );
+			CString base = MUSIC_BASE;
+			base.toUTF16();
+			AP_Play( TYPE_FOLDER, base, NULL, fullpath );
+		}
+		return;
+
+	case TAVI_KEY_JOG1_UP:
+		AP_Volume( 1 );
+		break;
+
+	case TAVI_KEY_JOG1_DOWN:
+		AP_Volume( 0 );
+		break;
+
+	case TAVI_KEY_JOG1_ENTER:
+		if( g_MiscCtrl->FolderOpen() ) break;
+		if( g_ExtLCD->GetCurrentMode() == CExtLCD::EXT_STAGE_VOLUME ) {
+			g_ExtLCD->ChangeMode( CExtLCD::EXT_STAGE_LIST );
+			break;
+		}
+	case VK_ESC: // 수정된 사항.
+	case VK_LEFT:
+		if( m_Stack.IsEmpty() ) {
+			// Exit folder viewer
+			SendMessage( WINDOW_KILL );
+			return;
+		}
+		else {
+			FolderPrev p = m_Stack.Pop();
+			m_nStartIdx = p.start_idx;
+			m_nSelectedIdx = p.sel_idx;
+			m_szCurrentDir = p.folder;
+			ScanDir( m_szCurrentDir );
+			OnPaint( rcClient );
+		}
+		break;
+
+	case VK_F2: // Menu
+    if( m_uzList.Count() ) {
+      CreateContextMenu();
+      m_pCtxMenuWnd->SetFocus();
+    }
+		break;
+
+	case VK_EXT_ESC:
+		SendMessage( WINDOW_TASK_KILL_AND_SWITCH );
+		break;
+
+	case VK_F3:
+		SendMessage( WINDOW_SET_BG );
+		break;
+
+	case TAVI_KEY_LMODE:
+		SendMessage( WINDOW_TASK_SWITCH );
+		break;
+
+	}
+
+	CListView::OnKeypressed( kevt );
+
+    // draw ext. lcd
+   SetListItem( (CListItem*)GetSelectedItem(), m_uzList.Count() );
+
+	// Clear Key buffer
+	ClearKeyBuffer();
+}
+
+void CFolderView::Flickering( bool fShow )
+{
+	CPixmap* pixmap;
+	CListItem* puzItem = GetSelectedItem();
+	int idx = m_nSelectedIdx;
+	
+	op_BitBlt( &g_SysPixmap, rcABS.x1+2+m_nOffset, rcABS.y1+2+idx*m_puzBarPixmap->m_nHeight,
+			m_puzBarPixmap, 0, 0, m_puzBarPixmap->m_nWidth, m_puzBarPixmap->m_nHeight );
+	pixmap = m_uzIconList[puzItem->m_nSelectedIconIdx];
+	op_BitBlt( &g_SysPixmap, rcABS.x1+m_nOffset+9, rcABS.y1+7+idx*m_puzBarPixmap->m_nHeight,
+				pixmap, 0, 0, pixmap->m_nWidth, pixmap->m_nHeight );
+
+	// Show or Hide text
+	if( fShow ) {
+		int len = puzItem->m_szText.GetSize();
+		uchar_t* pwcString;// = puzItem->m_szText.ConvertWideString();
+		int nBoundaryLen = pT->GetBoundaryLength( pwcString, len, 12, DT_TRANSPARENCY, m_puzBarPixmap->m_nWidth-34 );
+		int x = rcABS.x1+30+m_nOffset;
+		for( int i=0; i<nBoundaryLen; i++ ) {
+			x += pT->DrawCharacter( pwcString[i], 
+				x, rcABS.y1+7+idx*m_puzBarPixmap->m_nHeight,
+				_BLACK, 12, DT_TRANSPARENCY );
+		}
+	}
+
+	Flush();
+}
+
+void CFolderView::OnMouseEvent( const MouseEvent& evt )
+{
+	CListView::OnMouseEvent( evt );
+}
+
+void CFolderView::OnPaint( const CRect& rc )
+{
+    SetListItem( (CListItem*)GetSelectedItem(), m_uzList.Count() );
+    
+	if( m_uzList.Count() == 0 ) {
+		g_SysPixmap.Fill( rcABS.x1, rcABS.y1, rcABS.GetWidth(), rcABS.GetHeight(), 0 );
+		pT->DrawResText( ML_NO_FILES, 
+			320/2 - (pT->GetStringWidth(ML_NO_FILES, 12, DT_TRANSPARENCY|DT_OUTLINE)/2), 
+			110, _WHITE, 12, DT_TRANSPARENCY|DT_OUTLINE );
+		DrawBottomGuidePannel( SKIP_OSD_REFRESH, BGPID_HOME| BGPID_MENU );
+		op_Flush();
+
+		return;
+	}
+
+	// CHECK PLAYING FILE
+	CListItem* pitem;
+	for( int i=0; i<m_uzList.Count(); i++ ) {
+		pitem = m_uzList[i];
+		if( pitem->m_nType == NODE_TYPE_FILE ) {
+			if( pitem->m_nkey == g_PlayKey )  {
+				if( AP_GetPlayState() == AUDIO_STATE_PLAYING ) {
+					pitem->m_nSelectedIconIdx = LII_PLAY_S;
+					pitem->m_nIconIdx = LII_PLAY_U;
+				}
+				else {
+					pitem->m_nSelectedIconIdx = LII_PAUSE_S;
+					pitem->m_nIconIdx = LII_PAUSE_U;
+				}
+			}
+			else {
+				pitem->m_nSelectedIconIdx = LII_MUSIC_S;
+				pitem->m_nIconIdx = LII_MUSIC_U;
+			}
+		}
+	}
+	
+	DrawBottomGuidePannel( SKIP_OSD_REFRESH, BGPID_HOME| BGPID_MENU );
+	CListView::OnPaint( rc );
+}
+
+void CFolderView::OnWindowEvent( const WindowEvent& evt )
+{
+	struct timeval tv;
+	switch( evt.nMessage ) {
+	case WINDOW_IDLE:
+		if( g_MiscCtrl->FolderOpen() ) {
+			if( g_pFocusedWnd == this ) {
+				ScrollText();
+			}
+		} else {
+			g_ExtLCD->ScrollText();
+		}
+		break;
+	case ON_FOLDER:
+#if 0
+		if( evt.nParam ) {	/* Folder Open */
+			g_ExtLCD->ChangeMode( CExtLCD::EXT_STAGE_READY );
+		} else {
+			g_ExtLCD->ChangeMode( CExtLCD::EXT_STAGE_LIST );
+		}
+		g_ExtLCD->Update();
+#endif
+		break;
+	}
+}
+
+
+void CFolderView::Update( void )
+{
+	m_nSelectedIdx = 0;
+	m_nStartIdx = 0;
+	ResetScrollBar();
+	CWindow::Update();
+}
+
+void CFolderView::Show( void )
+{
+	extern int handle_key;
+
+	SetTopTitle();
+	CWindow::Show();
+	ioctl( handle_key, TAVI_KEY_IOCS_REPEATMODE, 1 );
+	ioctl( handle_key, TAVI_KEY_IOCS_SINGLEEVENT, 1 );
+}
+
+static void ResetPrevStatus( CFolderView* pview )
+{
+	CStack< FolderPrev > stack;
+	FolderPrev p;
+	
+	while( pview->m_Stack.IsEmpty() == false ) {
+		p = pview->m_Stack.Pop();
+		p.sel_idx = 0;
+		p.start_idx = 0;
+		stack.Push( p );
+	}
+
+	while( stack.IsEmpty() == false ) {
+		p = stack.Pop();
+		pview->m_Stack.Push( p );
+	}
+}
+
+static int NameAscentSort( RMuint8* arg )
+{
+	CFolderView* pView = ( CFolderView* )arg;
+	g_pFocusedWnd = pView;
+	pView->m_pCtxMenuWnd->SetVisible( false );
+	pView->m_pCtxMenuWnd->Hide();
+	delete pView->m_pCtxMenuWnd->m_pCtxMenu;
+	pView->m_pCtxMenuWnd->m_pCtxMenu = NULL;
+	TaviSysParam.sort = CListView::NAME_ASCENT;
+	pView->Sort( CListView::NAME_ASCENT );
+	pView->Update();
+	ResetPrevStatus( pView );
+}
+
+static int NameDescentSort( RMuint8* arg )
+{
+	CFolderView* pView = ( CFolderView* )arg;
+	g_pFocusedWnd = pView;
+	pView->m_pCtxMenuWnd->SetVisible( false );
+	pView->m_pCtxMenuWnd->Hide();
+	delete pView->m_pCtxMenuWnd->m_pCtxMenu;
+	pView->m_pCtxMenuWnd->m_pCtxMenu = NULL;
+	TaviSysParam.sort = CListView::NAME_DESCENT;
+	pView->Sort( CListView::NAME_DESCENT );
+	pView->Update();
+	ResetPrevStatus( pView );
+}
+
+static int DateAscentSort( RMuint8* arg )
+{
+	CFolderView* pView = ( CFolderView* )arg;
+	g_pFocusedWnd = pView;
+	pView->m_pCtxMenuWnd->SetVisible( false );
+	pView->m_pCtxMenuWnd->Hide();
+	delete pView->m_pCtxMenuWnd->m_pCtxMenu;
+	pView->m_pCtxMenuWnd->m_pCtxMenu = NULL;
+	TaviSysParam.sort = CListView::DATE_ASCENT;
+	pView->Sort( CListView::DATE_ASCENT );
+	pView->Update();
+	ResetPrevStatus( pView );
+}
+
+static int DateDescentSort( RMuint8* arg )
+{
+	CFolderView* pView = ( CFolderView* )arg;
+	g_pFocusedWnd = pView;
+	pView->m_pCtxMenuWnd->SetVisible( false );
+	pView->m_pCtxMenuWnd->Hide();
+	delete pView->m_pCtxMenuWnd->m_pCtxMenu;
+	pView->m_pCtxMenuWnd->m_pCtxMenu = NULL;
+	TaviSysParam.sort = CListView::DATE_DESCENT;
+	pView->Sort( CListView::DATE_DESCENT );
+	pView->Update();
+	ResetPrevStatus( pView );
+}
+
+static void FileToPlaylist( M3UHandle hM3U, CString& path )
+{
+	M3UTag tag;
+	uchar_t fullpath[MAX_PATH];
+	uchar_t delimeter[] = { '/', 0 };
+	uchar_t* name;
+
+	name = (uchar_t*)GetFilename( (char*)path, true );
+	tag.m_nTime = 0;
+	tag.m_szPath = (char*)path+8; // remove /hd1
+	tag.m_nPathLen = ustrlen((uchar_t*)tag.m_szPath)*2;
+	tag.m_szTitle = ( char* )name;
+	tag.m_nTitleUnicode = true;
+	tag.m_nTitleLen = ustrlen(name)*2;
+	M3UAdd( hM3U, &tag );
+}
+
+#if 0
+static void FolderToPlaylist( IDDB_Desc* desc, M3UHandle hM3U, CString& dir )
+{
+	CString szCurpath;
+	CString szPathname;
+	int diff;
+	bool fFlickering=false;
+	int nFlickeringCount = 0;
+	RMuint32 sdDirFd;
+	FATFS_ERROR sdFatfsErr;
+	FATFS_DIR_ENTRY_INFO info;
+	char* pChar;
+	M3UTag tag;
+
+	szCurpath = dir;
+	
+	pChar = ( char* )szCurpath;
+	sdFatfsErr = fatfs_wdopen( (RMuint16*)pChar, &sdDirFd );
+	if( sdFatfsErr != FATFS_ERROR_NO_ERROR ) goto __end;
+
+	while( (sdFatfsErr=fatfs_dread(sdDirFd, &info)) == FATFS_ERROR_NO_ERROR ) {
+		if( ustrcmp((uchar_t*)info.name, (uchar_t*)".\0") == 0 ) continue;
+		if( ustrcmp((uchar_t*)info.name, (uchar_t*)".\0.\0") == 0 ) continue;
+		szPathname = szCurpath + "/";
+		szPathname += info.name;
+		if( info.attributes&0x10 ) continue;
+			
+		else {
+			if( CheckMedia(info.name, true) == MEDIA_UNKNOWN ) continue;
+
+			tag.m_nTime = 0;
+			tag.m_szPath = (char*)szPathname;
+			tag.m_nPathLen = szPathname.GetSize();
+			tag.m_szTitle = GetFilename( info.name, true );
+			M3UAdd( hM3U, &tag );
+		}
+	}
+	fatfs_dclose( sdDirFd );
+}
+#endif
+
+int CFolderView::AddToPlaylist( RMuint8* arg )
+{
+	CFolderView* pView = ( CFolderView* )arg;
+	M3UHandle hM3U;
+	CString playlist = INSTANCE_PLAYLIST;
+	
+	playlist.toUTF16();
+	hM3U = M3UInit( (uchar_t*)playlist, M3U_APPEND );
+	if( hM3U == 0 ) {
+		hM3U = M3UCreate( (uchar_t*)playlist );
+		M3UClose( hM3U );
+		hM3U = M3UInit( (uchar_t*)playlist, M3U_APPEND );
+	}
+	if( !hM3U ) {
+		TAVI_DEBUGMSG( "failed to open M3U file!!\n" );
+		// show error message
+		return -1;
+	}
+	CListItem* pitem = pView->GetSelectedItem();
+
+	CString path;
+	if( pitem->m_nType == NODE_TYPE_FOLDER ) {
+		//path = pView->m_szCurrentDir + "/" + pitem->m_szText;
+		//FolderToPlaylist( pView->m_hDB, hM3U );
+	}
+	else {
+		path = pView->m_szCurrentDir;
+		path.Add( (uchar_t*)"/\0\0\0" );
+		path.Add( pitem->m_szText );
+		FileToPlaylist( hM3U, path );
+	}
+	M3UClose( hM3U );
+	pView->m_pCtxMenuWnd->SetVisible( false );
+	pView->m_pCtxMenuWnd->Hide();
+}
+
+void CFolderView::CreateContextMenu( void )
+{
+	int nSelect = TaviSysParam.sort;
+	CListItem* pitem = GetSelectedItem();
+
+	m_pCtxMenuWnd->Reset();
+	CPopUpSubMenu* pSubMenu = new CPopUpSubMenu;
+	if( pitem->m_nType == NODE_TYPE_FILE ) {
+		m_pCtxMenuWnd->m_pCtxMenu->AddSubMenu( ML_ADD_TO_IPLAYLIST, NULL, -1, AddToPlaylist, (RMuint8*)this );
+	}
+	pSubMenu->AddSubMenuItem( ML_NAME_ASCENT, 0, NameAscentSort, (RMuint8*)this );
+	pSubMenu->AddSubMenuItem( ML_NAME_DESCENT, 0, NameDescentSort, (RMuint8*)this );
+	pSubMenu->AddSubMenuItem( ML_TIME_ASCENT, 0, DateAscentSort, (RMuint8*)this );
+	pSubMenu->AddSubMenuItem( ML_TIME_DESCENT, 0, DateDescentSort, (RMuint8*)this );
+	//pSubMenu->AddSubMenuItem( ML_BACK, FALSE, NULL, NULL );
+	pSubMenu->PointedMenuItemIdx = nSelect;
+	m_pCtxMenuWnd->m_pCtxMenu->AddSubMenu( ML_SORTING_METHOD, pSubMenu, nSelect, NULL, NULL );
+}
+
+
+void CFolderView::SetTopTitle( void )
+{
+	if( m_Stack.Count() ) {
+		uchar_t name[MAX_PATH];
+		uchar_t* folder = ( uchar_t* )GetFilename( (char*)m_szCurrentDir, true );
+		uchar_t parent[] = { '.', '.', '/', 0 };
+		ustrcpy( name, parent );
+		ustrcat( name, folder );
+		g_TopPanel->SetTitle( (char*)name, true );
+	}
+	else {
+		g_TopPanel->SetTitle( ML_MUSIC );
+	}
+	g_TopPanel->Update();
+}
+
+/* FIN */

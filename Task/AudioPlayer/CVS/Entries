@@ -1,0 +1,37 @@
+/AudioPlayer.h/1.2/Mon Apr 17 04:27:19 2006//
+/FolderPL.h/1.2/Thu Mar  9 02:17:56 2006//
+/FolderView.h/1.2/Mon Apr 17 04:28:12 2006//
+/ID3View.h/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/MP3HeaderInfo.h/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/MusicDB.cpp/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/MusicDB.h/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/MusicDBPL.h/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/MusicMainWnd.cpp/1.4/Mon Apr 17 04:29:30 2006//
+/MusicMainWnd.h/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/PlayBottomWnd.cpp/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/PlayBottomWnd.h/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/PlaylistPL.h/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/PointerList.cpp/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/PointerList.h/1.1.1.1/Wed Feb 22 12:33:31 2006//
+/VolProgressBar.cpp/1.4/Mon Mar 13 02:32:51 2006//
+/VolProgressBar.h/1.1.1.1/Wed Feb 22 12:33:31 2006//
+D/ID3////
+D/gdbm////
+/MP3HeaderInfo.cpp/1.5/Thu Apr 20 04:11:53 2006//
+/musicdef.h/1.2/Thu Apr 20 04:11:53 2006//
+/ID3View.cpp/1.3/Mon Jun  5 01:46:54 2006//
+/MusicDBPL.cpp/1.3/Fri Jun  9 05:56:35 2006//
+/PlayListView.h/1.2/Fri Jun  9 05:56:35 2006//
+/Playlist.cpp/1.2/Fri Jun  9 05:56:36 2006//
+/PlaylistPL.cpp/1.3/Fri Jun  9 05:56:36 2006//
+/Playlist.h/1.3/Fri Jun  9 06:18:10 2006//
+/AudioCmd.h/1.3/Fri Jun  9 00:50:44 2006//
+/FolderPL.cpp/1.5/Fri Jun  9 05:56:35 2006//
+/FolderView.cpp/1.6/Mon Jun 12 04:29:21 2006//
+/PlayerWnd.h/1.4/Mon Jun 12 04:31:00 2006//
+/Makefile/1.4/Mon Jun  5 03:29:28 2006//
+D/Melon////
+/AudioPlayer.cpp/1.6/Wed Jun 21 07:54:27 2006//
+/PlayListView.cpp/1.7/Thu Jun 22 02:47:12 2006//
+/PlayerWnd.cpp/1.13/Thu Jun 22 02:47:12 2006//
+/MusicPlayer.cpp/1.12/Thu Jun 22 03:01:31 2006//
